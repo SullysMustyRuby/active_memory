@@ -1,4 +1,4 @@
-defmodule MnesiaCompanion.Ets.Table do
+defmodule ActiveMemory.Ets.Table do
   defmacro __using__(opts) do
     opts = Macro.expand(opts, __CALLER__)
 
@@ -34,7 +34,7 @@ end
 
 # defstruct Definition.struct_fields(@table_attrs)
 # def struct_fields do
-#   [{:__meta__, MnesiaCompanion.Ets.Table} | attributes]
+#   [{:__meta__, ActiveMemory.Ets.Table} | attributes]
 # end
 
 # [:name, :breed, :weight, :fixed?]

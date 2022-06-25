@@ -1,7 +1,7 @@
 defmodule SelectTest do
   use ExUnit.Case
 
-  import MnesiaCompanion.Select
+  import ActiveMemory.Select
 
   describe "select" do
     test "turns the syntax into proper select" do

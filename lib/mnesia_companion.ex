@@ -1,5 +1,5 @@
-defmodule MnesiaCompanion do
+defmodule ActiveMemory do
   @moduledoc """
-  Documentation for `MnesiaCompanion`.
+  Documentation for `ActiveMemory`.
   """
 end

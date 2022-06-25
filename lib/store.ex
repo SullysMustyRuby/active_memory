@@ -1,11 +1,11 @@
-defmodule MnesiaCompanion.Store do
+defmodule ActiveMemory.Store do
   defmacro __using__(opts) do
     opts = Macro.expand(opts, __CALLER__)
 
     quote do
       import unquote(__MODULE__)
 
-      alias unquote(MnesiaCompanion.Match)
+      alias unquote(ActiveMemory.Match)
 
       opts = unquote(opts)
 
@@ -99,7 +99,7 @@ defmodule MnesiaCompanion.Store do
       defp all_records(:ets) do
         :ets.tab2list(@table_name)
         |> Task.async_stream(fn record -> :erlang.apply(@table_name, :to_struct, [record]) end)
-        |> Enum.into([])
+        |> Enum.into([], fn {:ok, struct} -> struct end)
       end
 
       defp all_records(:mnesia) do

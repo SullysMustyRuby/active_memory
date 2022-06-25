@@ -1,4 +1,4 @@
-defmodule MnesiaCompanion.MixProject do
+defmodule ActiveMemory.MixProject do
   use Mix.Project
 
   def project do

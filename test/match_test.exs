@@ -1,14 +1,14 @@
-defmodule MnesiaCompanion.MatchTest do
+defmodule ActiveMemory.MatchTest do
   use ExUnit.Case
 
-  alias MnesiaCompanion.Match
+  alias ActiveMemory.Match
 
   defmodule Tester do
     use Memento.Table, attributes: [:email, :first, :last, :hair_color, :shoe_size]
   end
 
   defmodule Tester.Store do
-    use MnesiaCompanion.Store, table: Tester
+    use ActiveMemory.Store, table: Tester
   end
 
   setup_all do

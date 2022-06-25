@@ -1,4 +1,4 @@
-defmodule MnesiaCompanion.Select do
+defmodule ActiveMemory.Select do
   defmacro select(query) do
     reduce(query)
     |> Macro.escape()

@@ -1,4 +1,4 @@
-# MnesiaCompanion
+# ActiveMemory
 
 **TODO: Add description**
 

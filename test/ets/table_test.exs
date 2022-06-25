@@ -1,4 +1,4 @@
-defmodule MnesiaCompanion.Ets.TableTest do
+defmodule ActiveMemory.Ets.TableTest do
   use ExUnit.Case
 
   alias Test.Support.Dogs.Dog

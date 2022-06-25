@@ -1,4 +1,4 @@
 defmodule Test.Support.People.Store do
-  use MnesiaCompanion.Store,
+  use ActiveMemory.Store,
     table: Test.Support.People.Person
 end

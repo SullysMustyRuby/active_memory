@@ -1,4 +1,4 @@
-defmodule MnesiaCompanion.Match do
+defmodule ActiveMemory.Match do
   def build(table_name, query_map) do
     keywords = Map.to_list(query_map)
 

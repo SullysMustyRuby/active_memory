@@ -1,5 +1,5 @@
 defmodule Test.Support.Dogs.Store do
-  use MnesiaCompanion.Store,
+  use ActiveMemory.Store,
     table: Test.Support.Dogs.Dog,
     type: :ets
 end

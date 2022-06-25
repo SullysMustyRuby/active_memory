@@ -1,6 +1,6 @@
-defmodule MnesiaCompanion.StoreTest do
+defmodule ActiveMemory.StoreTest do
   use ExUnit.Case
-  doctest MnesiaCompanion
+  doctest ActiveMemory
 
   alias Test.Support.People.Person
   alias Test.Support.People.Store, as: PeopleStore
@@ -99,7 +99,7 @@ defmodule MnesiaCompanion.StoreTest do
   end
 
   describe "one/1 with a select query" do
-    import MnesiaCompanion.Select
+    import ActiveMemory.Select
 
     setup do
       write_seeds()
@@ -171,7 +171,7 @@ defmodule MnesiaCompanion.StoreTest do
   end
 
   describe "select/1 with a select query" do
-    import MnesiaCompanion.Select
+    import ActiveMemory.Select
 
     setup do
       write_seeds()
@@ -269,7 +269,7 @@ defmodule MnesiaCompanion.StoreTest do
   end
 
   describe "withdraw/1 with a select query" do
-    import MnesiaCompanion.Select
+    import ActiveMemory.Select
 
     setup do
       write_seeds()
