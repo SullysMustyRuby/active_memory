@@ -1,8 +1,8 @@
-defmodule MnesiaCompanion.MatchQuery do
-  def build(table, query_map) do
+defmodule MnesiaCompanion.Match do
+  def build(table_name, query_map) do
     keywords = Map.to_list(query_map)
 
-    table
+    table_name
     |> :mnesia.table_info(:attributes)
     |> validate_query(keywords)
     |> build_match_tuple(keywords)
@@ -16,9 +16,12 @@ defmodule MnesiaCompanion.MatchQuery do
   end
 
   defp build_match_tuple({:ok, attributes}, keywords) do
-    attributes
-    |> Enum.into([], fn key -> Keyword.get(keywords, key, :_) end)
-    |> List.to_tuple()
+    query =
+      attributes
+      |> Enum.into([], fn key -> Keyword.get(keywords, key, :_) end)
+      |> List.to_tuple()
+
+    {:ok, query}
   end
 
   defp build_match_tuple(error, _keywords), do: error

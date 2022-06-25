@@ -22,8 +22,24 @@ be found at <https://hexdocs.pm/mnesia_companion>.
 Notes:
 create a better query syntax.
 
-- relationships?
-- validations?
+
+- validations? -> Ecto style?
+- Indexing 
+
+
+agrigates?
+sort
+
+Setup options
+  :mniesia
+  :ets
+
+  :mnesia, nodes: [node list]
+  :mnesia, manager: true
+  :ets heir -> MnesiaManager then when boots back gets back table? 
+
+
+
 
 for u in User -> no we are not dealing with different tables, each repo has its own table
 
@@ -57,14 +73,3 @@ where :name == "erin" and :age > 26
     {:==, :director, "Steven Spielberg"},
   }
 }
-
-{:and, [context: Elixir, import: Kernel],
- [
-   {:==, [context: Elixir, import: Kernel], [:name, "erin"]},
-   {:>, [context: Elixir, import: Kernel], [:age, 26]}
- ]
-}
-
-agrigates?
-sort
-

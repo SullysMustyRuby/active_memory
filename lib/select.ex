@@ -1,5 +1,5 @@
-defmodule MnesiaCompanion.Query do
-  defmacro where(query) do
+defmodule MnesiaCompanion.Select do
+  defmacro select(query) do
     reduce(query)
     |> Macro.escape()
   end
@@ -9,4 +9,6 @@ defmodule MnesiaCompanion.Query do
   defp reduce(value) when is_atom(value), do: value
 
   defp reduce(value) when is_binary(value), do: value
+
+  defp reduce(value) when is_integer(value), do: value
 end

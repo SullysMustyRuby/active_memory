@@ -2,49 +2,156 @@ defmodule MnesiaCompanion.StoreTest do
   use ExUnit.Case
   doctest MnesiaCompanion
 
-  defmodule Tester do
-    use Memento.Table, attributes: [:email, :first, :last, :hair_color]
-  end
-
-  defmodule Tester.Store do
-    use MnesiaCompanion.Store, table: Tester
-  end
-
-  defmodule BadSchema do
-    defstruct [:email, :first, :last, :hair_color]
-  end
+  alias Test.Support.People.Person
+  alias Test.Support.People.Store, as: PeopleStore
+  alias Test.Support.Dogs.Dog
+  # alias Test.Support.Dogs.Store, as: DogStore
 
   setup_all do
-    {:ok, pid} = Tester.Store.start_link()
+    {:ok, pid} = PeopleStore.start_link()
     {:ok, %{pid: pid}}
   end
 
   setup do
-    on_exit(fn -> :mnesia.clear_table(Tester) end)
+    on_exit(fn -> :mnesia.clear_table(Person) end)
 
     :ok
   end
 
-  describe "get/1" do
-    alias MnesiaCompanion.StoreTest.Tester
+  describe "all/0" do
+    test "retuns all records" do
+      write_seeds()
 
+      people = PeopleStore.all()
+
+      assert length(people) == 10
+    end
+
+    test "returns empty list if table empty" do
+      assert PeopleStore.all() == []
+    end
+  end
+
+  describe "delete/1" do
+    setup do
+      write_seeds()
+
+      :ok
+    end
+
+    test "removes the record and returns ok" do
+      {:ok, karl} = PeopleStore.one(%{first: "karl", last: "agathon"})
+
+      assert PeopleStore.delete(karl) == :ok
+
+      assert {:ok, nil} == PeopleStore.one(%{first: "karl", last: "agathon"})
+    end
+
+    test "returns ok for a record that does not exist" do
+      {:ok, karl} = PeopleStore.one(%{first: "karl", last: "agathon"})
+
+      assert PeopleStore.delete(karl) == :ok
+
+      assert {:ok, nil} == PeopleStore.one(%{first: "karl", last: "agathon"})
+
+      assert PeopleStore.delete(karl) == :ok
+    end
+
+    test "returns error for a record with a different schema" do
+      dog = %Dog{
+        breed: "PitBull",
+        weight: 60,
+        fixed?: "yes",
+        name: "smegol"
+      }
+
+      assert PeopleStore.delete(dog) == {:error, :bad_schema}
+    end
+  end
+
+  describe "one/1 with a map query" do
+    setup do
+      write_seeds()
+
+      :ok
+    end
+
+    test "returns the record matching the query" do
+      {:ok, record} = PeopleStore.one(%{first: "erin", last: "boeger"})
+
+      assert record.first == "erin"
+      assert record.last == "boeger"
+    end
+
+    test "returns nil list when no record matches" do
+      assert {:ok, nil} == PeopleStore.one(%{first: "tiberious", last: "kirk"})
+    end
+
+    test "returns error when more than one record" do
+      assert PeopleStore.one(%{hair_color: "brown", cylon?: false}) ==
+               {:error, :more_than_one_result}
+    end
+
+    test "returns error when bad keys are in the query" do
+      assert {:error, :query_schema_mismatch} ==
+               PeopleStore.one(%{shoe_size: "13", lipstick: "pink"})
+    end
+  end
+
+  describe "one/1 with a select query" do
+    import MnesiaCompanion.Select
+
+    setup do
+      write_seeds()
+
+      :ok
+    end
+
+    test "retuns the records that match a simple equals query" do
+      query = select(:first == "erin" and :last == "boeger")
+      {:ok, person} = PeopleStore.one(query)
+
+      assert person.first == "erin"
+      assert person.last == "boeger"
+    end
+
+    test "returns the records that match an 'and' query" do
+      query = select(:hair_color == "bald" and :age > 98)
+      {:ok, person} = PeopleStore.one(query)
+
+      assert person.hair_color == "bald"
+      assert person.first == "erin"
+    end
+
+    test "returns nil list when no record matches" do
+      query = select(:first == "tiberious" and :last == "kirk")
+      assert {:ok, nil} == PeopleStore.one(query)
+    end
+
+    test "returns error when more than one record" do
+      query = select(:hair_color == "brown" and :cylon? == false)
+      assert PeopleStore.one(query) == {:error, :more_than_one_result}
+    end
+  end
+
+  describe "select/1 with a map query" do
     test "returns all records matching the query" do
       for hair_color <- ["bald", "blonde", "black", "blue"] do
-        %Tester{
+        %Person{
           email: "#{hair_color}@here.com",
           first: "erin",
           last: "boeger",
           hair_color: hair_color
         }
-        |> Tester.Store.insert()
+        |> PeopleStore.write()
       end
 
-      {:ok, [record]} = Tester.Store.get(%{hair_color: "blonde"})
+      {:ok, [record]} = PeopleStore.select(%{hair_color: "blonde"})
 
       assert record.email == "blonde@here.com"
       assert record.hair_color == "blonde"
 
-      {:ok, records} = Tester.Store.get(%{first: "erin", last: "boeger"})
+      {:ok, records} = PeopleStore.select(%{first: "erin", last: "boeger"})
       assert length(records) == 4
 
       for record <- records do
@@ -53,59 +160,192 @@ defmodule MnesiaCompanion.StoreTest do
       end
     end
 
-    test "returns empty list when no records match" do
-      for hair_color <- ["bald", "blonde", "black", "blue"] do
-        %Tester{
-          email: "#{hair_color}@here.com",
-          first: "erin",
-          last: "boeger",
-          hair_color: hair_color
-        }
-        |> Tester.Store.insert()
-      end
-
-      assert length(Tester.Store.all()) == 4
-
-      assert {:ok, []} == Tester.Store.get(%{first: "tiberious", last: "kirk"})
+    test "returns nil when no records match" do
+      assert {:ok, []} == PeopleStore.select(%{first: "tiberious", last: "kirk"})
     end
 
     test "returns error when bad keys are in the query" do
       assert {:error, :query_schema_mismatch} ==
-               Tester.Store.get(%{shoe_size: "13", lipstick: "pink"})
+               PeopleStore.select(%{shoe_size: "13", lipstick: "pink"})
     end
   end
 
-  describe "insert/1" do
-    alias MnesiaCompanion.StoreTest.Tester
+  describe "select/1 with a select query" do
+    import MnesiaCompanion.Select
 
-    test "inserts the record with the correct schema" do
-      record = %Tester{
+    setup do
+      write_seeds()
+
+      :ok
+    end
+
+    test "retuns the records that match a simple equals query" do
+      query = select(:cylon? == true)
+      {:ok, people} = PeopleStore.select(query)
+
+      assert length(people) == 3
+
+      for person <- people do
+        assert person.cylon?
+      end
+    end
+
+    test "returns the records that match an 'and' query" do
+      query = select(:hair_color == "brown" and :age > 45)
+      {:ok, people} = PeopleStore.select(query)
+
+      assert length(people) > 1
+
+      for person <- people do
+        assert person.hair_color == "brown"
+        assert person.age > 45
+      end
+    end
+
+    test "returns the records that match a multiple 'or' query" do
+      query = select(:first == "erin" or :first == "laura" or :first == "galan")
+      {:ok, people} = PeopleStore.select(query)
+
+      assert length(people) == 3
+
+      for person <- people do
+        assert Enum.member?(["erin", "laura", "galan"], person.first)
+      end
+    end
+
+    test "returns the records that match a multiple 'or' with 'and' query" do
+      query = select(:cylon? == true or (:hair_color == "blonde" and :age < 50))
+      {:ok, people} = PeopleStore.select(query)
+
+      assert length(people) == 4
+
+      for person <- people do
+        if !person.cylon?, do: assert(person.hair_color == "blonde" && person.age < 50)
+      end
+    end
+
+    test "returns records that match a !=" do
+      query = select(:hair_color != "brown" and :age != 31)
+      {:ok, people} = PeopleStore.select(query)
+
+      assert length(people) == 3
+
+      for person <- people do
+        assert person.hair_color != "brown"
+        assert person.age != 31
+      end
+    end
+  end
+
+  describe "withdraw/1 with a map query" do
+    setup do
+      write_seeds()
+
+      :ok
+    end
+
+    test "returns the record matching the query and deletes the record" do
+      {:ok, record} = PeopleStore.withdraw(%{first: "erin", last: "boeger"})
+
+      assert record.first == "erin"
+      assert record.last == "boeger"
+
+      assert PeopleStore.one(%{first: "erin", last: "boeger"}) == {:ok, nil}
+    end
+
+    test "returns nil list when no record matches" do
+      assert {:ok, nil} == PeopleStore.withdraw(%{first: "tiberious", last: "kirk"})
+    end
+
+    test "returns error when more than one record" do
+      assert PeopleStore.withdraw(%{hair_color: "brown", cylon?: false}) ==
+               {:error, :more_than_one_result}
+    end
+
+    test "returns error when bad keys are in the query" do
+      assert {:error, :query_schema_mismatch} ==
+               PeopleStore.withdraw(%{shoe_size: "13", lipstick: "pink"})
+    end
+  end
+
+  describe "withdraw/1 with a select query" do
+    import MnesiaCompanion.Select
+
+    setup do
+      write_seeds()
+
+      :ok
+    end
+
+    test "retuns the records that match a simple equals query" do
+      query = select(:first == "erin" and :last == "boeger")
+      {:ok, person} = PeopleStore.withdraw(query)
+
+      assert person.first == "erin"
+      assert person.last == "boeger"
+
+      assert PeopleStore.one(query) == {:ok, nil}
+    end
+
+    test "returns the records that match an 'and' query" do
+      query = select(:hair_color == "bald" and :age > 98)
+      {:ok, person} = PeopleStore.withdraw(query)
+
+      assert person.hair_color == "bald"
+      assert person.first == "erin"
+
+      assert PeopleStore.one(query) == {:ok, nil}
+    end
+
+    test "returns nil list when no record matches" do
+      query = select(:first == "tiberious" and :last == "kirk")
+      assert {:ok, nil} == PeopleStore.withdraw(query)
+    end
+
+    test "returns error when more than one record" do
+      query = select(:hair_color == "brown" and :cylon? == false)
+      assert PeopleStore.withdraw(query) == {:error, :more_than_one_result}
+    end
+  end
+
+  describe "write/1" do
+    test "writes the record with the correct schema" do
+      record = %Person{
         email: "test@here.com",
         first: "erin",
         last: "boeger",
         hair_color: "bald"
       }
 
-      assert Tester.Store.all() == []
-      assert {:ok, record} == Tester.Store.insert(record)
-      assert Tester.Store.all() == [record]
+      assert PeopleStore.all() == []
+      assert {:ok, record} == PeopleStore.write(record)
+      assert PeopleStore.all() == [record]
     end
 
     test "returns error for a record with no schema" do
       record = %{email: "test@here.com", first: "erin", last: "boeger", hair_color: "bald"}
 
-      assert {:error, :bad_schema} == Tester.Store.insert(record)
+      assert {:error, :bad_schema} == PeopleStore.write(record)
     end
 
     test "returns error for a record with a different schema" do
-      record = %BadSchema{
-        email: "test@here.com",
-        first: "erin",
-        last: "boeger",
-        hair_color: "bald"
+      dog = %Dog{
+        breed: "PitBull",
+        weight: 60,
+        fixed?: "yes",
+        name: "smegol"
       }
 
-      assert {:error, :bad_schema} == Tester.Store.insert(record)
+      assert {:error, :bad_schema} == PeopleStore.write(dog)
     end
+  end
+
+  defp write_seeds do
+    {seeds, _} =
+      File.cwd!()
+      |> Path.join(["/test/support/people/", "person_seeds.exs"])
+      |> Code.eval_file()
+
+    Enum.each(seeds, fn seed -> Person.new(seed) |> PeopleStore.write() end)
   end
 end
