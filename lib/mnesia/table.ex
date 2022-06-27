@@ -16,7 +16,7 @@ defmodule ActiveMemory.Mnesia.Table do
         |> Map.merge(attributes)
       end
 
-      def __info__, do: @table_attrs
+      def __meta__, do: %{attributes: @table_attrs}
     end
   end
 end

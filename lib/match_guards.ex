@@ -2,7 +2,7 @@ defmodule ActiveMemory.MatchGuards do
   def build(table, query_map) do
     keywords = Map.to_list(query_map)
 
-    table.__info__()
+    table.__meta__()
     |> validate_query(keywords)
     |> build_match_tuple(keywords)
   end

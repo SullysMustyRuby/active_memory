@@ -33,7 +33,7 @@ defmodule ActiveMemory.Ets.Table do
         |> new()
       end
 
-      def __info__,
+      def __meta__,
         do: %{attributes: @table_attrs, query_map: @query_map, match_head: @match_head}
     end
   end

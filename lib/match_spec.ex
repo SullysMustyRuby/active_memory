@@ -2,8 +2,8 @@ defmodule ActiveMemory.MatchSpec do
   @result [:"$_"]
 
   def build(query, table) do
-    query_map = :erlang.apply(table, :__info__, []) |> Map.get(:query_map)
-    match_head = :erlang.apply(table, :__info__, []) |> Map.get(:match_head)
+    query_map = :erlang.apply(table, :__meta__, []) |> Map.get(:query_map)
+    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:match_head)
     guards = reduce(query, query_map)
 
     [{match_head, [guards], @result}]
