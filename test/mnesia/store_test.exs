@@ -1,4 +1,4 @@
-defmodule ActiveMemory.StoreTest do
+defmodule ActiveMemory.Mneisa.AdapterTest do
   use ExUnit.Case
   doctest ActiveMemory
 
@@ -98,8 +98,8 @@ defmodule ActiveMemory.StoreTest do
     end
   end
 
-  describe "one/1 with a select query" do
-    import ActiveMemory.Select
+  describe "one/1 with a match query" do
+    import ActiveMemory.Query
 
     setup do
       write_seeds()
@@ -108,7 +108,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "retuns the records that match a simple equals query" do
-      query = select(:first == "erin" and :last == "boeger")
+      query = match(:first == "erin" and :last == "boeger")
       {:ok, person} = PeopleStore.one(query)
 
       assert person.first == "erin"
@@ -116,7 +116,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns the records that match an 'and' query" do
-      query = select(:hair_color == "bald" and :age > 98)
+      query = match(:hair_color == "bald" and :age > 98)
       {:ok, person} = PeopleStore.one(query)
 
       assert person.hair_color == "bald"
@@ -124,12 +124,12 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns nil list when no record matches" do
-      query = select(:first == "tiberious" and :last == "kirk")
+      query = match(:first == "tiberious" and :last == "kirk")
       assert {:ok, nil} == PeopleStore.one(query)
     end
 
     test "returns error when more than one record" do
-      query = select(:hair_color == "brown" and :cylon? == false)
+      query = match(:hair_color == "brown" and :cylon? == false)
       assert PeopleStore.one(query) == {:error, :more_than_one_result}
     end
   end
@@ -170,8 +170,8 @@ defmodule ActiveMemory.StoreTest do
     end
   end
 
-  describe "select/1 with a select query" do
-    import ActiveMemory.Select
+  describe "select/1 with a match query" do
+    import ActiveMemory.Query
 
     setup do
       write_seeds()
@@ -180,7 +180,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "retuns the records that match a simple equals query" do
-      query = select(:cylon? == true)
+      query = match(:cylon? == true)
       {:ok, people} = PeopleStore.select(query)
 
       assert length(people) == 3
@@ -191,7 +191,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns the records that match an 'and' query" do
-      query = select(:hair_color == "brown" and :age > 45)
+      query = match(:hair_color == "brown" and :age > 45)
       {:ok, people} = PeopleStore.select(query)
 
       assert length(people) > 1
@@ -203,7 +203,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns the records that match a multiple 'or' query" do
-      query = select(:first == "erin" or :first == "laura" or :first == "galan")
+      query = match(:first == "erin" or :first == "laura" or :first == "galan")
       {:ok, people} = PeopleStore.select(query)
 
       assert length(people) == 3
@@ -214,7 +214,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns the records that match a multiple 'or' with 'and' query" do
-      query = select(:cylon? == true or (:hair_color == "blonde" and :age < 50))
+      query = match(:cylon? == true or (:hair_color == "blonde" and :age < 50))
       {:ok, people} = PeopleStore.select(query)
 
       assert length(people) == 4
@@ -225,7 +225,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns records that match a !=" do
-      query = select(:hair_color != "brown" and :age != 31)
+      query = match(:hair_color != "brown" and :age != 31)
       {:ok, people} = PeopleStore.select(query)
 
       assert length(people) == 3
@@ -268,8 +268,8 @@ defmodule ActiveMemory.StoreTest do
     end
   end
 
-  describe "withdraw/1 with a select query" do
-    import ActiveMemory.Select
+  describe "withdraw/1 with a match query" do
+    import ActiveMemory.Query
 
     setup do
       write_seeds()
@@ -278,7 +278,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "retuns the records that match a simple equals query" do
-      query = select(:first == "erin" and :last == "boeger")
+      query = match(:first == "erin" and :last == "boeger")
       {:ok, person} = PeopleStore.withdraw(query)
 
       assert person.first == "erin"
@@ -288,7 +288,7 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns the records that match an 'and' query" do
-      query = select(:hair_color == "bald" and :age > 98)
+      query = match(:hair_color == "bald" and :age > 98)
       {:ok, person} = PeopleStore.withdraw(query)
 
       assert person.hair_color == "bald"
@@ -298,12 +298,12 @@ defmodule ActiveMemory.StoreTest do
     end
 
     test "returns nil list when no record matches" do
-      query = select(:first == "tiberious" and :last == "kirk")
+      query = match(:first == "tiberious" and :last == "kirk")
       assert {:ok, nil} == PeopleStore.withdraw(query)
     end
 
     test "returns error when more than one record" do
-      query = select(:hair_color == "brown" and :cylon? == false)
+      query = match(:hair_color == "brown" and :cylon? == false)
       assert PeopleStore.withdraw(query) == {:error, :more_than_one_result}
     end
   end

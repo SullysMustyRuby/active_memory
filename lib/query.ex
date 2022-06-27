@@ -1,5 +1,5 @@
-defmodule ActiveMemory.Select do
-  defmacro select(query) do
+defmodule ActiveMemory.Query do
+  defmacro match(query) do
     reduce(query)
     |> Macro.escape()
   end

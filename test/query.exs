@@ -1,15 +1,15 @@
-defmodule SelectTest do
+defmodule QueryTest do
   use ExUnit.Case
 
-  import ActiveMemory.Select
+  import ActiveMemory.Query
 
-  describe "select" do
-    test "turns the syntax into proper select" do
+  describe "match" do
+    test "turns the syntax into proper match" do
       assert {:or, {:==, :name, "erin"}, {:==, :name, "tiberious"}} ==
-               select(:name == "erin" or :name == "tiberious")
+               match(:name == "erin" or :name == "tiberious")
 
       assert {:or, {:and, {:==, :name, "erin"}, {:==, :name, "tiberious"}}, {:<, :age, 35}} ==
-               select((:name == "erin" and :name == "tiberious") or :age < 35)
+               match((:name == "erin" and :name == "tiberious") or :age < 35)
     end
   end
 end

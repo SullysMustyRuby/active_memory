@@ -26,7 +26,8 @@ defmodule ActiveMemory.Ets.TableTest do
     test "returns a tuple with the attributes in correct order", %{attributes: attributes} do
       struct = Dog.new(attributes)
 
-      res = Dog.to_tuple(struct)
+      tuple_dog = Dog.to_tuple(struct)
+      assert is_tuple(tuple_dog)
     end
   end
 
@@ -34,7 +35,8 @@ defmodule ActiveMemory.Ets.TableTest do
     test "returns a struct with the attributes in correct order", %{attributes: attributes} do
       struct = Dog.new(attributes)
 
-      res = struct |> Dog.to_tuple() |> Dog.to_struct()
+      return_struct = struct |> Dog.to_tuple() |> Dog.to_struct()
+      assert return_struct == struct
     end
   end
 end

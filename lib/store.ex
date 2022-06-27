@@ -1,149 +1,76 @@
 defmodule ActiveMemory.Store do
+  alias ActiveMemory.Definition
+
   defmacro __using__(opts) do
     opts = Macro.expand(opts, __CALLER__)
 
     quote do
       import unquote(__MODULE__)
 
-      alias unquote(ActiveMemory.Match)
+      # alias unquote(ActiveMemory.Match)
 
       opts = unquote(opts)
 
       @table_name Keyword.get(opts, :table)
       @table_type Keyword.get(opts, :type, :mnesia)
+      @adapter Definition.set_adapter(@table_type)
 
       def start_link(_opts \\ []) do
         GenServer.start_link(__MODULE__, [], name: __MODULE__)
       end
 
       def init(_) do
-        create_table(@table_type)
+        create_table()
         {:ok, %{table_name: @table_name}}
       end
 
-      def all, do: all_records(@table_type)
+      def all, do: :erlang.apply(@adapter, :all_records, [@table_name])
 
-      def clear_table do
-        :mnesia.clear_table(@table_name)
+      def create_table do
+        :erlang.apply(@adapter, :create_table, [@table_name])
       end
 
       def delete(%@table_name{} = struct) do
-        Memento.transaction!(fn ->
-          Memento.Query.delete_record(struct)
-        end)
+        :erlang.apply(@adapter, :delete, [struct, @table_name])
       end
+
+      def delete(nil), do: :ok
 
       def delete(_), do: {:error, :bad_schema}
 
-      def one(query_map) when is_map(query_map) do
-        with {:ok, query} <- Match.build(@table_name, query_map),
-             {:ok, [record | []]} <- query_match(query) do
-          {:ok, record}
-        else
-          {:ok, []} -> {:ok, nil}
-          {:ok, records} when is_list(records) -> {:error, :more_than_one_result}
-          {:error, message} -> {:error, message}
-        end
+      def delete_all do
+        :erlang.apply(@adapter, :delete_all, [@table_name])
       end
 
-      def one({_operand, _lhs, _rhs} = where) do
-        case where_select(where) do
-          {:ok, [record | []]} -> {:ok, record}
-          {:ok, []} -> {:ok, nil}
-          {:ok, records} when is_list(records) -> {:error, :more_than_one_result}
-          {:error, message} -> {:error, message}
-        end
+      def one(query) do
+        :erlang.apply(@adapter, :one, [query, @table_name])
       end
 
-      def select(query_map) when is_map(query_map) do
-        case Match.build(@table_name, query_map) do
-          {:error, message} ->
-            {:error, message}
-
-          {:ok, query} ->
-            query_match(query)
-        end
+      def select(query) when is_map(query) do
+        :erlang.apply(@adapter, :select, [query, @table_name])
       end
 
-      def select({_operand, _lhs, _rhs} = where), do: where_select(where)
+      def select({_operand, _lhs, _rhs} = query) do
+        :erlang.apply(@adapter, :select, [query, @table_name])
+      end
 
-      def select(_), do: {:error, :bad_where_query}
+      def select(_), do: {:error, :bad_select_query}
 
       def withdraw(query_map) when is_map(query_map) do
-        with {:ok, query} <- Match.build(@table_name, query_map),
-             {:ok, [record | []]} <- query_match(query),
-             :ok <- delete(record) do
-          {:ok, record}
-        else
-          {:ok, []} -> {:ok, nil}
-          {:ok, records} when is_list(records) -> {:error, :more_than_one_result}
-          {:error, message} -> {:error, message}
-        end
+        :erlang.apply(@adapter, :withdraw, [query_map, @table_name])
       end
 
-      def withdraw({_operand, _lhs, _rhs} = where) do
-        with {:ok, [record | []]} <- where_select(where),
-             :ok <- delete(record) do
-          {:ok, record}
-        else
-          {:ok, []} -> {:ok, nil}
-          {:ok, records} when is_list(records) -> {:error, :more_than_one_result}
-          {:error, message} -> {:error, message}
-        end
+      def withdraw({_operand, _lhs, _rhs} = query) do
+        :erlang.apply(@adapter, :withdraw, [query, @table_name])
       end
 
-      def write(%@table_name{} = struct), do: write_record(struct, @table_type)
+      def withdraw(_), do: {:error, :bad_withdraw_query}
+
+      def write(%@table_name{} = struct) do
+        :erlang.apply(@adapter, :write, [struct, @table_name])
+      end
 
       def write(_), do: {:error, :bad_schema}
-
-      defp all_records(:ets) do
-        :ets.tab2list(@table_name)
-        |> Task.async_stream(fn record -> :erlang.apply(@table_name, :to_struct, [record]) end)
-        |> Enum.into([], fn {:ok, struct} -> struct end)
-      end
-
-      defp all_records(:mnesia) do
-        Memento.transaction!(fn ->
-          Memento.Query.all(@table_name)
-        end)
-      end
-
-      defp create_table(:ets) do
-        :ets.new(@table_name, [:named_table, :public, read_concurrency: true])
-      end
-
-      defp create_table(:mnesia) do
-        Memento.Table.create!(@table_name)
-      end
-
-      defp query_match(query) do
-        Memento.transaction(fn ->
-          Memento.Query.match(@table_name, query)
-        end)
-      end
-
-      defp where_select(where) do
-        Memento.transaction(fn ->
-          Memento.Query.select(@table_name, where)
-        end)
-      end
-
-      defp write_record(struct, :ets) do
-        with ets_tuple when is_tuple(ets_tuple) <-
-               :erlang.apply(@table_name, :to_tuple, [struct]),
-             true <- :ets.insert(@table_name, ets_tuple) do
-          {:ok, struct}
-        else
-          false -> {:error, :write_fail}
-          {:error, message} -> {:error, message}
-        end
-      end
-
-      defp write_record(struct, :mnesia) do
-        Memento.transaction(fn ->
-          Memento.Query.write(struct)
-        end)
-      end
     end
   end
 end

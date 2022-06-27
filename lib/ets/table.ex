@@ -1,4 +1,6 @@
 defmodule ActiveMemory.Ets.Table do
+  alias ActiveMemory.Definition
+
   defmacro __using__(opts) do
     opts = Macro.expand(opts, __CALLER__)
 
@@ -8,6 +10,8 @@ defmodule ActiveMemory.Ets.Table do
       opts = unquote(opts)
 
       @table_attrs Keyword.get(opts, :attributes)
+      @query_map Definition.build_query_map(@table_attrs)
+      @match_head Definition.build_match_head(@query_map)
 
       defstruct @table_attrs
 
@@ -28,14 +32,9 @@ defmodule ActiveMemory.Ets.Table do
         |> Enum.into(%{})
         |> new()
       end
+
+      def __info__,
+        do: %{attributes: @table_attrs, query_map: @query_map, match_head: @match_head}
     end
   end
 end
-
-# defstruct Definition.struct_fields(@table_attrs)
-# def struct_fields do
-#   [{:__meta__, ActiveMemory.Ets.Table} | attributes]
-# end
-
-# [:name, :breed, :weight, :fixed?]
-# {"gem", "Shaggy Black Lab", "30", false}
