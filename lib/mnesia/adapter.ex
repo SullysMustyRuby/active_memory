@@ -20,9 +20,11 @@ defmodule ActiveMemory.Mnesia.Adapter do
     end
   end
 
-  def create_table(table, options) do
-    case Memento.Table.create(table, options) do
-      :ok ->
+  def create_table(table, _options) do
+    options = [{:ram_copies, [node()]}, attributes: table.__meta__.attributes]
+
+    case :mnesia.create_table(table, options) do
+      {:atomic, :ok} ->
         :ok
 
       {:error, {:already_exists, _table}} ->
