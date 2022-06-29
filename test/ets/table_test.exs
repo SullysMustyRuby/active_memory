@@ -6,7 +6,7 @@ defmodule ActiveMemory.Ets.TableTest do
   setup do
     attributes = %{
       breed: "Shaggy Black Lab",
-      weight: "30",
+      weight: 30,
       fixed?: false,
       name: "gem"
     }
@@ -14,29 +14,24 @@ defmodule ActiveMemory.Ets.TableTest do
     {:ok, %{attributes: attributes}}
   end
 
-  describe "new" do
-    test "returns a struct with the attributes assigned", %{attributes: attributes} do
-      struct = Dog.new(attributes)
-      assert struct.__struct__ == Dog
-      assert struct.breed == "Shaggy Black Lab"
-    end
-  end
-
   describe "to_tuple" do
     test "returns a tuple with the attributes in correct order", %{attributes: attributes} do
-      struct = Dog.new(attributes)
+      struct = struct(Dog, attributes)
 
-      tuple_dog = Dog.to_tuple(struct)
-      assert is_tuple(tuple_dog)
+      assert {"gem", "Shaggy Black Lab", 30, false} == Dog.to_tuple(struct)
     end
   end
 
   describe "to_struct" do
-    test "returns a struct with the attributes in correct order", %{attributes: attributes} do
-      struct = Dog.new(attributes)
+    test "returns a struct with the attributes in correct order" do
+      tuple = {"gem", "Shaggy Black Lab", 30, false}
+      dog = Dog.to_struct(tuple)
 
-      return_struct = struct |> Dog.to_tuple() |> Dog.to_struct()
-      assert return_struct == struct
+      assert dog.__struct__ == Dog
+      assert dog.name == "gem"
+      assert dog.breed == "Shaggy Black Lab"
+      assert dog.weight == 30
+      refute dog.fixed?
     end
   end
 end

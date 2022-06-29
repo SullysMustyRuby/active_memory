@@ -13,6 +13,9 @@ defmodule ActiveMemory.MatchGuardsTest do
 
   setup_all do
     {:ok, pid} = Tester.Store.start_link()
+
+    on_exit(fn -> :mnesia.delete_table(Tester) end)
+
     {:ok, %{pid: pid}}
   end
 

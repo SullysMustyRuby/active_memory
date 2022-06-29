@@ -1,5 +1,5 @@
 [
-  %{
+  %Test.Support.People.Person{
     email: "erin@galactica.com",
     first: "erin",
     last: "boeger",
@@ -7,7 +7,7 @@
     age: 99,
     cylon?: true
   },
-  %{
+  %Test.Support.People.Person{
     email: "caprica@galactica.com",
     first: "caprica",
     last: "boeger",
@@ -15,7 +15,7 @@
     age: 31,
     cylon?: true
   },
-  %{
+  %Test.Support.People.Person{
     email: "cpt_adama@galactica.com",
     first: "willian",
     last: "adama",
@@ -23,7 +23,7 @@
     age: 55,
     cylon?: false
   },
-  %{
+  %Test.Support.People.Person{
     email: "kara@galactica.com",
     first: "kara",
     last: "thrace",
@@ -31,7 +31,7 @@
     age: 32,
     cylon?: false
   },
-  %{
+  %Test.Support.People.Person{
     email: "dualla@galactica.com",
     first: "anastasia",
     last: "dualla",
@@ -39,7 +39,7 @@
     age: 99,
     cylon?: false
   },
-  %{
+  %Test.Support.People.Person{
     email: "laura@galactica.com",
     first: "laura",
     last: "roslin",
@@ -47,7 +47,7 @@
     age: 65,
     cylon?: false
   },
-  %{
+  %Test.Support.People.Person{
     email: "galan@galactica.com",
     first: "galan",
     last: "tyrol",
@@ -55,7 +55,7 @@
     age: 35,
     cylon?: true
   },
-  %{
+  %Test.Support.People.Person{
     email: "karl@galactica.com",
     first: "karl",
     last: "agathon",
@@ -63,7 +63,7 @@
     age: 35,
     cylon?: false
   },
-  %{
+  %Test.Support.People.Person{
     email: "helena@galactica.com",
     first: "helena",
     last: "cain",
@@ -71,7 +71,7 @@
     age: 45,
     cylon?: false
   },
-  %{
+  %Test.Support.People.Person{
     email: "cally@galactica.com",
     first: "cally",
     last: "tyrol",

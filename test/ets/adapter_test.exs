@@ -10,6 +10,9 @@ defmodule ActiveMemory.Ets.AdapterTest do
 
   setup_all do
     {:ok, pid} = DogStore.start_link()
+
+    on_exit(fn -> :ets.delete(Dog) end)
+
     {:ok, %{pid: pid}}
   end
 
@@ -310,14 +313,12 @@ defmodule ActiveMemory.Ets.AdapterTest do
 
   describe "write/1" do
     test "writes the record with the correct schema" do
-      record =
-        %Dog{
-          breed: "Shaggy Black Lab",
-          weight: "30",
-          fixed?: false,
-          name: "gem"
-        }
-        |> Dog.new()
+      record = %Dog{
+        breed: "Shaggy Black Lab",
+        weight: "30",
+        fixed?: false,
+        name: "gem"
+      }
 
       assert DogStore.all() == []
       assert {:ok, record} == DogStore.write(record)
@@ -350,6 +351,6 @@ defmodule ActiveMemory.Ets.AdapterTest do
       |> Path.join(["/test/support/dogs/", "dog_seeds.exs"])
       |> Code.eval_file()
 
-    Enum.each(seeds, fn seed -> Dog.new(seed) |> DogStore.write() end)
+    Enum.each(seeds, fn seed -> DogStore.write(seed) end)
   end
 end

@@ -5,10 +5,12 @@ defmodule ActiveMemory.Mneisa.AdapterTest do
   alias Test.Support.People.Person
   alias Test.Support.People.Store, as: PeopleStore
   alias Test.Support.Dogs.Dog
-  # alias Test.Support.Dogs.Store, as: DogStore
 
   setup_all do
     {:ok, pid} = PeopleStore.start_link()
+
+    on_exit(fn -> :mnesia.delete_table(Person) end)
+
     {:ok, %{pid: pid}}
   end
 
@@ -21,10 +23,13 @@ defmodule ActiveMemory.Mneisa.AdapterTest do
   describe "all/0" do
     test "retuns all records" do
       write_seeds()
-
       people = PeopleStore.all()
 
       assert length(people) == 10
+
+      for person <- people do
+        assert person.__struct__ == Person
+      end
     end
 
     test "returns empty list if table empty" do
@@ -346,6 +351,6 @@ defmodule ActiveMemory.Mneisa.AdapterTest do
       |> Path.join(["/test/support/people/", "person_seeds.exs"])
       |> Code.eval_file()
 
-    Enum.each(seeds, fn seed -> Person.new(seed) |> PeopleStore.write() end)
+    Enum.each(seeds, fn seed -> PeopleStore.write(seed) end)
   end
 end

@@ -1,85 +1,136 @@
 defmodule ActiveMemory.Mnesia.Adapter do
-  alias ActiveMemory.MatchGuards
+  alias ActiveMemory.{Adapter, MatchGuards, MatchSpec}
+  @behaviour Adapter
 
-  def all_records(table) do
-    Memento.transaction!(fn ->
-      Memento.Query.all(table)
-    end)
-  end
-
-  def delete(struct, table) do
-    Memento.transaction!(fn ->
-      Memento.Query.delete_record(struct)
-    end)
-  end
-
-  def delete_all(table) do
-    :mnesia.clear_table(table)
-  end
-
-  def create_table(table) do
-    Memento.Table.create!(table)
-  end
-
-  def one(query_map, table) when is_map(query_map) do
-    with {:ok, query} <- MatchGuards.build(table, query_map),
-         {:ok, [record | []]} <- match_query(query, table) do
-      {:ok, record}
-    else
-      {:ok, []} -> {:ok, nil}
-      {:ok, records} when is_list(records) -> {:error, :more_than_one_result}
+  def all(table) do
+    case match_object(:mnesia.table_info(table, :wild_pattern)) do
+      {:atomic, []} -> []
+      {:atomic, records} -> Enum.into(records, [], &convert_to_struct(&1, table))
       {:error, message} -> {:error, message}
     end
   end
 
-  def one(query, table) when is_tuple(query) do
-    case select_query(query, table) do
-      {:ok, [record | []]} -> {:ok, record}
-      {:ok, []} -> {:ok, nil}
-      {:ok, records} when is_list(records) -> {:error, :more_than_one_result}
-      {:error, message} -> {:error, message}
-    end
-  end
-
-  def select(query_map, table) when is_map(query_map) do
-    case MatchGuards.build(table, query_map) do
-      {:ok, query} ->
-        match_query(query, table)
+  def copy_table(table) do
+    case :mnesia.add_table_copy(table, Node.self(), :ram_copies) do
+      {:atomic, :ok} ->
+        :ok
 
       {:error, message} ->
         {:error, message}
     end
   end
 
-  def select(query, table) when is_tuple(query) do
-    select_query(query, table)
+  def create_table(table, options) do
+    case Memento.Table.create(table, options) do
+      :ok ->
+        :ok
+
+      {:error, {:already_exists, _table}} ->
+        copy_table(table)
+
+      {:error, message} ->
+        {:error, message}
+    end
   end
 
-  def withdraw(query, table) do
-    with {:ok, %{} = record} <- one(query, table),
-         :ok <- delete(record, table) do
-      {:ok, record}
-    else
-      {:ok, nil} -> {:ok, nil}
+  def delete(struct, table) do
+    case delete_object(struct, table) do
+      {:atomic, :ok} -> :ok
       {:error, message} -> {:error, message}
     end
   end
 
-  def write(struct, _table) do
-    Memento.transaction(fn ->
-      Memento.Query.write(struct)
+  def delete_all(table) do
+    :mnesia.clear_table(table)
+  end
+
+  def one(query_map, table) when is_map(query_map) do
+    with {:ok, query} <- MatchGuards.build(table, query_map),
+         match_query <- Tuple.insert_at(query, 0, table),
+         {:atomic, record} when length(record) == 1 <- match_object(match_query) do
+      {:ok, convert_to_struct(hd(record), table)}
+    else
+      {:atomic, []} -> {:ok, nil}
+      {:atomic, records} when is_list(records) -> {:error, :more_than_one_result}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  def one(query, table) when is_tuple(query) do
+    with match_spec = build_mnesia_match_spec(query, table),
+         {:atomic, record} when length(record) == 1 <- select_object(match_spec, table) do
+      {:ok, convert_to_struct(hd(record), table)}
+    else
+      {:atomic, []} -> {:ok, nil}
+      {:atomic, records} when is_list(records) -> {:error, :more_than_one_result}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  def select(query_map, table) when is_map(query_map) do
+    with {:ok, query} <- MatchGuards.build(table, query_map),
+         match_query <- Tuple.insert_at(query, 0, table),
+         {:atomic, records} when is_list(records) <- match_object(match_query) do
+      {:ok, Enum.into(records, [], &convert_to_struct(&1, table))}
+    else
+      {:atomic, []} -> {:ok, []}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  def select(query, table) when is_tuple(query) do
+    with match_spec = build_mnesia_match_spec(query, table),
+         {:atomic, records} when records != [] <- select_object(match_spec, table) do
+      {:ok, Enum.into(records, [], &convert_to_struct(&1, table))}
+    else
+      {:atomic, []} -> {:ok, []}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  def write(struct, table) do
+    case write_object(convert_from_struct(struct), table) do
+      {:atomic, :ok} -> {:ok, struct}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  defp delete_object(struct, table) do
+    :mnesia.transaction(fn ->
+      :mnesia.delete_object(table, convert_from_struct(struct), :write)
     end)
   end
 
-  defp match_query(query, table) do
-    Memento.transaction(fn ->
-      Memento.Query.match(table, query)
+  defp match_object(query) do
+    :mnesia.transaction(fn ->
+      :mnesia.match_object(query)
     end)
   end
 
-  defp select_query(query, table) do
-    Memento.transaction(fn ->
-      Memento.Query.select(table, query)
+  defp select_object(match_spec, table) do
+    :mnesia.transaction(fn ->
+      :mnesia.select(table, match_spec, :read)
     end)
+  end
+
+  defp write_object(object, table) do
+    :mnesia.transaction(fn ->
+      :mnesia.write(table, object, :write)
+    end)
+  end
+
+  defp build_mnesia_match_spec(query, table) do
+    [{match_head, query, result}] = MatchSpec.build(query, table)
+    [{Tuple.insert_at(match_head, 0, table), query, result}]
+  end
+
+  defp convert_to_struct(object, table) do
+    :erlang.apply(table, :to_struct, [Tuple.delete_at(object, 0)])
+  end
+
+  defp convert_from_struct(%{__struct__: name} = struct) do
+    name
+    |> :erlang.apply(:to_tuple, [struct])
+    |> Tuple.insert_at(0, name)
   end
 end

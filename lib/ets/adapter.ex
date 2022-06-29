@@ -1,13 +1,14 @@
 defmodule ActiveMemory.Ets.Adapter do
-  alias ActiveMemory.{MatchGuards, MatchSpec}
+  alias ActiveMemory.{Adapter, MatchGuards, MatchSpec}
+  @behaviour Adapter
 
-  def all_records(table) do
+  def all(table) do
     :ets.tab2list(table)
     |> Task.async_stream(fn record -> :erlang.apply(table, :to_struct, [record]) end)
     |> Enum.into([], fn {:ok, struct} -> struct end)
   end
 
-  def create_table(table) do
+  def create_table(table, _options) do
     :ets.new(table, [:named_table, :public, read_concurrency: true])
   end
 
@@ -61,16 +62,6 @@ defmodule ActiveMemory.Ets.Adapter do
       {:ok, to_struct(records, table)}
     else
       [] -> {:ok, []}
-      {:error, message} -> {:error, message}
-    end
-  end
-
-  def withdraw(query, table) do
-    with {:ok, %{} = record} <- one(query, table),
-         :ok <- delete(record, table) do
-      {:ok, record}
-    else
-      {:ok, nil} -> {:ok, nil}
       {:error, message} -> {:error, message}
     end
   end

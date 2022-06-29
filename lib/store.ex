@@ -7,8 +7,6 @@ defmodule ActiveMemory.Store do
     quote do
       import unquote(__MODULE__)
 
-      # alias unquote(ActiveMemory.Match)
-
       opts = unquote(opts)
 
       @table_name Keyword.get(opts, :table)
@@ -24,10 +22,10 @@ defmodule ActiveMemory.Store do
         {:ok, %{table_name: @table_name}}
       end
 
-      def all, do: :erlang.apply(@adapter, :all_records, [@table_name])
+      def all, do: :erlang.apply(@adapter, :all, [@table_name])
 
       def create_table do
-        :erlang.apply(@adapter, :create_table, [@table_name])
+        :erlang.apply(@adapter, :create_table, [@table_name, []])
       end
 
       def delete(%@table_name{} = struct) do
@@ -56,15 +54,15 @@ defmodule ActiveMemory.Store do
 
       def select(_), do: {:error, :bad_select_query}
 
-      def withdraw(query_map) when is_map(query_map) do
-        :erlang.apply(@adapter, :withdraw, [query_map, @table_name])
+      def withdraw(query) do
+        with {:ok, %{} = record} <- one(query),
+             :ok <- delete(record) do
+          {:ok, record}
+        else
+          {:ok, nil} -> {:ok, nil}
+          {:error, message} -> {:error, message}
+        end
       end
-
-      def withdraw({_operand, _lhs, _rhs} = query) do
-        :erlang.apply(@adapter, :withdraw, [query, @table_name])
-      end
-
-      def withdraw(_), do: {:error, :bad_withdraw_query}
 
       def write(%@table_name{} = struct) do
         :erlang.apply(@adapter, :write, [struct, @table_name])

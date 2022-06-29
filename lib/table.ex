@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Mnesia.Table do
+defmodule ActiveMemory.Table do
   alias ActiveMemory.Definition
 
   defmacro __using__(opts) do
@@ -13,7 +13,7 @@ defmodule ActiveMemory.Mnesia.Table do
       @query_map Definition.build_query_map(@table_attrs)
       @match_head Definition.build_match_head(@query_map)
 
-      use Memento.Table, attributes: @table_attrs
+      defstruct @table_attrs
 
       def to_tuple(%__MODULE__{} = struct) do
         @table_attrs

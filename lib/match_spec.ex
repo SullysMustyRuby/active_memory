@@ -22,6 +22,12 @@ defmodule ActiveMemory.MatchSpec do
   end
 
   defp reduce({operand, attribute, value}, query_map)
+       when is_atom(attribute) and not is_tuple(value) and is_map(query_map) do
+    variable = Map.get(query_map, attribute, attribute)
+    {translate(operand), variable, value}
+  end
+
+  defp reduce({operand, attribute, value}, query_map)
        when is_atom(attribute) and not is_tuple(value) do
     variable = Keyword.get(query_map, attribute, attribute)
     {translate(operand), variable, value}
