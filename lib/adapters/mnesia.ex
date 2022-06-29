@@ -1,5 +1,6 @@
 defmodule ActiveMemory.Adapters.Mnesia do
   alias ActiveMemory.Adapter
+  alias ActiveMemory.Adapter.Helpers
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
   @behaviour Adapter
 
@@ -128,12 +129,14 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   defp convert_to_struct(object, table) do
-    :erlang.apply(table, :to_struct, [Tuple.delete_at(object, 0)])
+    object
+    |> Tuple.delete_at(0)
+    |> Helpers.to_struct(table)
   end
 
   defp convert_from_struct(%{__struct__: name} = struct) do
-    name
-    |> :erlang.apply(:to_tuple, [struct])
+    struct
+    |> Helpers.to_tuple()
     |> Tuple.insert_at(0, name)
   end
 end

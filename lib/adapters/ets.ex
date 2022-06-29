@@ -1,11 +1,12 @@
 defmodule ActiveMemory.Adapters.Ets do
   alias ActiveMemory.Adapter
+  alias ActiveMemory.Adapter.Helpers
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
   @behaviour Adapter
 
   def all(table) do
     :ets.tab2list(table)
-    |> Task.async_stream(fn record -> :erlang.apply(table, :to_struct, [record]) end)
+    |> Task.async_stream(fn record -> Helpers.to_struct(record, table) end)
     |> Enum.into([], fn {:ok, struct} -> struct end)
   end
 
@@ -14,8 +15,7 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   def delete(struct, table) do
-    with ets_tuple when is_tuple(ets_tuple) <-
-           :erlang.apply(table, :to_tuple, [struct]),
+    with ets_tuple when is_tuple(ets_tuple) <- Helpers.to_tuple(struct),
          true <- :ets.delete_object(table, ets_tuple) do
       :ok
     else
@@ -69,7 +69,7 @@ defmodule ActiveMemory.Adapters.Ets do
 
   def write(struct, table) do
     with ets_tuple when is_tuple(ets_tuple) <-
-           :erlang.apply(table, :to_tuple, [struct]),
+           Helpers.to_tuple(struct),
          true <- :ets.insert(table, ets_tuple) do
       {:ok, struct}
     else
@@ -92,6 +92,6 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   defp to_struct(record, table) when is_tuple(record) do
-    :erlang.apply(table, :to_struct, [record])
+    Helpers.to_struct(record, table)
   end
 end

@@ -15,21 +15,6 @@ defmodule ActiveMemory.Table do
 
       defstruct @table_attrs
 
-      def to_tuple(%__MODULE__{} = struct) do
-        @table_attrs
-        |> Enum.into([], fn key -> Map.get(struct, key) end)
-        |> List.to_tuple()
-      end
-
-      def to_struct(ets_tuple) when is_tuple(ets_tuple) do
-        attributes =
-          @table_attrs
-          |> Enum.with_index(fn element, index -> {element, elem(ets_tuple, index)} end)
-          |> Enum.into(%{})
-
-        struct(__MODULE__, attributes)
-      end
-
       def __meta__,
         do: %{attributes: @table_attrs, query_map: @query_map, match_head: @match_head}
     end
