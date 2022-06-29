@@ -4,7 +4,7 @@ defmodule ActiveMemory.MatchGuardsTest do
   alias ActiveMemory.MatchGuards
 
   defmodule Tester do
-    use ActiveMemory.Mnesia.Table, attributes: [:email, :first, :last, :hair_color, :shoe_size]
+    use ActiveMemory.Table, attributes: [:email, :first, :last, :hair_color, :shoe_size]
   end
 
   defmodule Tester.Store do

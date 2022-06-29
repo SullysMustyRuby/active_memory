@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Ets.TableTest do
+defmodule ActiveMemory.TableTest do
   use ExUnit.Case
 
   alias Test.Support.Dogs.Dog
