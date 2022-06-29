@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Mneisa.AdapterTest do
+defmodule ActiveMemory.Adapters.MneisaTest do
   use ExUnit.Case
   doctest ActiveMemory
 

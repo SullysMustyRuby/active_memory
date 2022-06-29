@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Ets.AdapterTest do
+defmodule ActiveMemory.Adapters.EtsTest do
   use ExUnit.Case
   doctest ActiveMemory
 

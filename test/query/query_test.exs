@@ -1,4 +1,4 @@
-defmodule QueryTest do
+defmodule ActiveMemory.QueryTest do
   use ExUnit.Case
 
   import ActiveMemory.Query

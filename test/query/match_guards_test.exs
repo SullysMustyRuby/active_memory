@@ -1,4 +1,4 @@
-defmodule ActiveMemory.MatchGuardsTest do
+defmodule ActiveMemory.Query.MatchGuardsTest do
   use ExUnit.Case
 
   alias ActiveMemory.Query.MatchGuards
