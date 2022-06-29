@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Mnesia.Adapter do
+defmodule ActiveMemory.Adapters.Mnesia do
   alias ActiveMemory.{Adapter, MatchGuards, MatchSpec}
   @behaviour Adapter
 

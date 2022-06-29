@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Ets.Adapter do
+defmodule ActiveMemory.Adapters.Ets do
   alias ActiveMemory.{Adapter, MatchGuards, MatchSpec}
   @behaviour Adapter
 

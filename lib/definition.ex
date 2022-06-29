@@ -1,7 +1,7 @@
 defmodule ActiveMemory.Definition do
-  def set_adapter(:ets), do: ActiveMemory.Ets.Adapter
+  def set_adapter(:ets), do: ActiveMemory.Adapters.Ets
 
-  def set_adapter(:mnesia), do: ActiveMemory.Mnesia.Adapter
+  def set_adapter(:mnesia), do: ActiveMemory.Adapters.Mnesia
 
   def build_match_head(query_map) do
     query_map
