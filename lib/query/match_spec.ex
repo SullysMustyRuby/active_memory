@@ -1,4 +1,4 @@
-defmodule ActiveMemory.MatchSpec do
+defmodule ActiveMemory.Query.MatchSpec do
   @result [:"$_"]
 
   def build(query, table) do

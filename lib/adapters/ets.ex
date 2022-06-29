@@ -1,5 +1,6 @@
 defmodule ActiveMemory.Adapters.Ets do
-  alias ActiveMemory.{Adapter, MatchGuards, MatchSpec}
+  alias ActiveMemory.Adapter
+  alias ActiveMemory.Query.{MatchGuards, MatchSpec}
   @behaviour Adapter
 
   def all(table) do

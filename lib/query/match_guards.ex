@@ -1,4 +1,4 @@
-defmodule ActiveMemory.MatchGuards do
+defmodule ActiveMemory.Query.MatchGuards do
   def build(table, query_map) do
     keywords = Map.to_list(query_map)
 

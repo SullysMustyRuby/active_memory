@@ -1,7 +1,7 @@
 defmodule ActiveMemory.MatchSpecTest do
   use ExUnit.Case
 
-  alias ActiveMemory.MatchSpec
+  alias ActiveMemory.Query.MatchSpec
   alias Test.Support.Dogs.Dog
 
   import ActiveMemory.Query

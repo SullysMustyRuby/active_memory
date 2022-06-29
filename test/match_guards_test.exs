@@ -1,7 +1,7 @@
 defmodule ActiveMemory.MatchGuardsTest do
   use ExUnit.Case
 
-  alias ActiveMemory.MatchGuards
+  alias ActiveMemory.Query.MatchGuards
 
   defmodule Tester do
     use ActiveMemory.Table, attributes: [:email, :first, :last, :hair_color, :shoe_size]
