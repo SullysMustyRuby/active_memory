@@ -1,5 +1,7 @@
 # ActiveMemory
 
+## **This is still a work in progess**
+
 ## **A Simple ORM for ETS and Mnesia**
 
 Bring the power of in memory storage with ETS and Mnesia to your Elixir application. 
