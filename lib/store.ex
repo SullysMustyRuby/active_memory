@@ -1,4 +1,7 @@
 defmodule ActiveMemory.Store do
+  @moduledoc """
+  The Store 
+  """
   alias ActiveMemory.Definition
 
   defmacro __using__(opts) do
@@ -25,12 +28,14 @@ defmodule ActiveMemory.Store do
         {:ok, %{table_name: @table_name}}
       end
 
+      @spec all() :: list(map())
       def all, do: :erlang.apply(@adapter, :all, [@table_name])
 
       def create_table do
         :erlang.apply(@adapter, :create_table, [@table_name, []])
       end
 
+      @spec all() :: :ok | {:error, any()}
       def delete(%{__struct__: @table_name} = struct) do
         :erlang.apply(@adapter, :delete, [struct, @table_name])
       end
@@ -39,10 +44,12 @@ defmodule ActiveMemory.Store do
 
       def delete(_), do: {:error, :bad_schema}
 
+      @spec delete_all() :: :ok | {:error, any()}
       def delete_all do
         :erlang.apply(@adapter, :delete_all, [@table_name])
       end
 
+      @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query) do
         :erlang.apply(@adapter, :one, [query, @table_name])
       end
@@ -51,6 +58,7 @@ defmodule ActiveMemory.Store do
         GenServer.call(__MODULE__, :reload_seeds)
       end
 
+      @spec select(map() | list(any())) :: {:ok, list(map())} | {:error, any()}
       def select(query) when is_map(query) do
         :erlang.apply(@adapter, :select, [query, @table_name])
       end
@@ -65,6 +73,7 @@ defmodule ActiveMemory.Store do
         GenServer.call(__MODULE__, :state)
       end
 
+      @spec withdraw(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def withdraw(query) do
         with {:ok, %{} = record} <- one(query),
              :ok <- delete(record) do
@@ -75,6 +84,7 @@ defmodule ActiveMemory.Store do
         end
       end
 
+      @spec write(map()) :: {:ok, map()} | {:error, any()}
       def write(%@table_name{} = struct) do
         :erlang.apply(@adapter, :write, [struct, @table_name])
       end

@@ -44,13 +44,22 @@ defmodule MyApp.People.Person do
   ]
 end
 ```
-Example Store:
+Example Mnesia Store (default):
 ```elixir
 defmodule MyApp.People.Store do
   use ActiveMemory.Store,
-    table: MyApp.People.Person # Defaults to Mnesia
+    table: MyApp.People.Person
 end
 ```
+Example ETS Store:
+```elixir
+defmodule MyApp.People.Store do
+  use ActiveMemory.Store,
+    table: MyApp.People.Person,
+    type: :ets
+end
+```
+
 Add the `Store` to your application supervision tree:
 ```elixir
 defmodule MyApp.Application do
@@ -91,7 +100,15 @@ Using the `match` macro you can strucure a basic query
 query = match(:department == "sales" or :department == "marketing" and :start_date > last_month)
 Store.select(query)
 ```
-
+## Seeding
+When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.
+```elixir
+defmodule MyApp.People.Store do
+  use ActiveMemory.Store,
+    table: MyApp.People.Person,
+    seed_file: Path.expand("person_seeds.exs", __DIR__)
+end
+```
 
 ## Installation
 
