@@ -1,5 +1,5 @@
 defmodule ActiveMemory.Adapters.MneisaTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   doctest ActiveMemory
 
   alias Test.Support.People.Person
@@ -10,6 +10,7 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     {:ok, pid} = PeopleStore.start_link()
 
     on_exit(fn -> :mnesia.delete_table(Person) end)
+    on_exit(fn -> Process.exit(pid, :kill) end)
 
     {:ok, %{pid: pid}}
   end
