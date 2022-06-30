@@ -28,7 +28,7 @@ defmodule ActiveMemory.Store do
         :erlang.apply(@adapter, :create_table, [@table_name, []])
       end
 
-      def delete(%@table_name{} = struct) do
+      def delete(%{__struct__: @table_name} = struct) do
         :erlang.apply(@adapter, :delete, [struct, @table_name])
       end
 
@@ -72,37 +72,3 @@ defmodule ActiveMemory.Store do
     end
   end
 end
-
-# def create_table(table) do
-#   options = Application.get_env(:core_cluster, :mnesia_options)
-#   create_table(table, options)
-# end
-
-# def create_table(table, options) do
-#   with :ok <- Memento.Table.create(table, options) do
-#     Logger.info("successfully created table: #{table}")
-#   else
-#     {:error, {:already_exists, _}} -> copy_table(table)
-#     {:error, message} -> Logger.error("Memento.Table.create failed with: #{message}")
-#   end
-
-#   :mnesia.wait_for_tables([table], 3000)
-# end
-
-# defp add_mnesia_manager do
-#   {:ok, _} = :mnesia.change_config(:extra_db_nodes, [@mnesia_manager])
-#   :ok
-# end
-
-# defp copy_table(table) do
-#   case Memento.Table.create_copy(table, node(), :ram_copies) do
-#     :ok ->
-#       Logger.info("successfully copied table: #{table}")
-
-#     {:error, {:already_exists, _, _}} ->
-#       Logger.info("table already exists and recovered: #{table}")
-
-#     {:error, message} ->
-#       Logger.error("failed to copy table: #{table} with: #{message}")
-#   end
-# end
