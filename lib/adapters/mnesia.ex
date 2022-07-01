@@ -2,6 +2,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   alias ActiveMemory.Adapter
   alias ActiveMemory.Adapter.Helpers
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
+
   @behaviour Adapter
 
   def all(table) do

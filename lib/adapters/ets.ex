@@ -11,7 +11,12 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   def create_table(table, _options) do
-    :ets.new(table, [:named_table, :public, read_concurrency: true])
+    try do
+      :ets.new(table, [:named_table, :public, read_concurrency: true])
+      :ok
+    rescue
+      ArgumentError -> {:error, :create_table_failed}
+    end
   end
 
   def delete(struct, table) do

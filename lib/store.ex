@@ -10,22 +10,28 @@ defmodule ActiveMemory.Store do
     quote do
       import unquote(__MODULE__)
 
+      use GenServer
+
       opts = unquote(opts)
 
       @table_name Keyword.get(opts, :table)
       @table_type Keyword.get(opts, :type, :mnesia)
       @adapter Definition.set_adapter(@table_type)
+      @before_init Keyword.get(opts, :before_init, :default)
       @seed_file Keyword.get(opts, :seed_file, nil)
+      @initial_state Keyword.get(opts, :initial_state, :default)
 
       def start_link(_opts \\ []) do
         GenServer.start_link(__MODULE__, [], name: __MODULE__)
       end
 
       def init(_) do
-        create_table()
-        run_seeds(@seed_file)
-
-        {:ok, %{table_name: @table_name}}
+        with :ok <- create_table(),
+             {:ok, :seed_success} <- run_seeds_file(@seed_file),
+             :ok <- before_init(@before_init),
+             {:ok, initial_state} <- initial_state(@initial_state) do
+          {:ok, initial_state}
+        end
       end
 
       @spec all() :: list(map())
@@ -92,14 +98,42 @@ defmodule ActiveMemory.Store do
       def write(_), do: {:error, :bad_schema}
 
       def handle_call(:reload_seeds, _from, state) do
-        {:reply, run_seeds(@seed_file), state}
+        {:reply, run_seeds_file(@seed_file), state}
       end
 
       def handle_call(:state, _from, state), do: {:reply, state, state}
 
-      defp run_seeds(nil), do: :ok
+      defp before_init(:default), do: :ok
 
-      defp run_seeds(file) when is_binary(file) do
+      defp before_init({method, args}) when is_list(args) do
+        :erlang.apply(__MODULE__, method, args)
+      end
+
+      defp before_init(methods) when is_list(methods) do
+        methods
+        |> Enum.into([], &before_init(&1))
+        |> Enum.all?(&(&1 == :ok))
+        |> case do
+          true -> :ok
+          _ -> {:error, :before_init_failure}
+        end
+      end
+
+      defp initial_state(:default) do
+        {:ok,
+         %{
+           started_at: DateTime.utc_now(),
+           table_name: @table_name
+         }}
+      end
+
+      defp initial_state({method, args}) do
+        :erlang.apply(__MODULE__, method, args)
+      end
+
+      defp run_seeds_file(nil), do: {:ok, :seed_success}
+
+      defp run_seeds_file(file) when is_binary(file) do
         with {seeds, _} when is_list(seeds) <- Code.eval_file(@seed_file),
              true <- write_seeds(seeds) do
           {:ok, :seed_success}

@@ -1,18 +1,33 @@
 defmodule ActiveMemory.MixProject do
   use Mix.Project
 
+  @app :active_memory
+  @author "Erin Boeger"
+  @github "https://github.com/SullysMustyRuby/active_memory"
+  @license "MIT"
+  @name "ActiveMemory"
+  @version "0.1.0"
+
   def project do
     [
-      app: :active_memory,
-      version: "0.1.0",
+      app: @app,
+      version: @version,
+      author: @author,
+      description: description(),
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Make ETS and Mnesia easier to use",
-      package: %{
-        licenses: [],
-        links: []
-      }
+      package: package(),
+
+      # ExDoc
+      name: @name,
+      source_url: @github,
+      homepage_url: @github,
+      docs: [
+        main: @name,
+        canonical: "https://hexdocs.pm/#{@app}",
+        extras: ["README.md"]
+      ]
     ]
   end
 
@@ -23,8 +38,25 @@ defmodule ActiveMemory.MixProject do
     ]
   end
 
+  defp description do
+    "A Simple ORM for ETS and Mnesia"
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
-    []
+    [
+      {:ex_doc, ">= 0.0.0", only: :docs},
+      {:inch_ex, ">= 0.0.0", only: :docs}
+    ]
+  end
+
+  defp package do
+    [
+      name: @app,
+      maintainers: [@author],
+      licenses: [@license],
+      files: ~w(mix.exs lib README.md),
+      links: %{"Github" => @github}
+    ]
   end
 end
