@@ -25,6 +25,7 @@ defmodule ActiveMemory.Store do
         GenServer.start_link(__MODULE__, [], name: __MODULE__)
       end
 
+      @impl true
       def init(_) do
         with :ok <- create_table(),
              {:ok, :seed_success} <- run_seeds_file(@seed_file),
@@ -97,10 +98,12 @@ defmodule ActiveMemory.Store do
 
       def write(_), do: {:error, :bad_schema}
 
+      @impl true
       def handle_call(:reload_seeds, _from, state) do
         {:reply, run_seeds_file(@seed_file), state}
       end
 
+      @impl true
       def handle_call(:state, _from, state), do: {:reply, state, state}
 
       defp before_init(:default), do: :ok

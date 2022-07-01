@@ -8,7 +8,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   def all(table) do
     case match_object(:mnesia.table_info(table, :wild_pattern)) do
       {:atomic, []} -> []
-      {:atomic, records} -> Enum.into(records, [], &convert_to_struct(&1, table))
+      {:atomic, records} -> Enum.into(records, [], &to_struct(&1, table))
       {:error, message} -> {:error, message}
     end
   end
@@ -53,7 +53,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
     with {:ok, query} <- MatchGuards.build(table, query_map),
          match_query <- Tuple.insert_at(query, 0, table),
          {:atomic, record} when length(record) == 1 <- match_object(match_query) do
-      {:ok, convert_to_struct(hd(record), table)}
+      {:ok, to_struct(hd(record), table)}
     else
       {:atomic, []} -> {:ok, nil}
       {:atomic, records} when is_list(records) -> {:error, :more_than_one_result}
@@ -64,7 +64,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   def one(query, table) when is_tuple(query) do
     with match_spec = build_mnesia_match_spec(query, table),
          {:atomic, record} when length(record) == 1 <- select_object(match_spec, table) do
-      {:ok, convert_to_struct(hd(record), table)}
+      {:ok, to_struct(hd(record), table)}
     else
       {:atomic, []} -> {:ok, nil}
       {:atomic, records} when is_list(records) -> {:error, :more_than_one_result}
@@ -76,7 +76,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
     with {:ok, query} <- MatchGuards.build(table, query_map),
          match_query <- Tuple.insert_at(query, 0, table),
          {:atomic, records} when is_list(records) <- match_object(match_query) do
-      {:ok, Enum.into(records, [], &convert_to_struct(&1, table))}
+      {:ok, to_struct(records, table)}
     else
       {:atomic, []} -> {:ok, []}
       {:error, message} -> {:error, message}
@@ -86,7 +86,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   def select(query, table) when is_tuple(query) do
     with match_spec = build_mnesia_match_spec(query, table),
          {:atomic, records} when records != [] <- select_object(match_spec, table) do
-      {:ok, Enum.into(records, [], &convert_to_struct(&1, table))}
+      {:ok, to_struct(records, table)}
     else
       {:atomic, []} -> {:ok, []}
       {:error, message} -> {:error, message}
@@ -94,7 +94,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   def write(struct, table) do
-    case write_object(convert_from_struct(struct), table) do
+    case write_object(to_tuple(struct), table) do
       {:atomic, :ok} -> {:ok, struct}
       {:error, message} -> {:error, message}
     end
@@ -102,7 +102,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
   defp delete_object(struct, table) do
     :mnesia.transaction(fn ->
-      :mnesia.delete_object(table, convert_from_struct(struct), :write)
+      :mnesia.delete_object(table, to_tuple(struct), :write)
     end)
   end
 
@@ -129,15 +129,11 @@ defmodule ActiveMemory.Adapters.Mnesia do
     [{Tuple.insert_at(match_head, 0, table), query, result}]
   end
 
-  defp convert_to_struct(object, table) do
-    object
-    |> Tuple.delete_at(0)
-    |> Helpers.to_struct(table)
+  defp to_struct(records, table) when is_list(records) do
+    Enum.into(records, [], &to_struct(&1, table))
   end
 
-  defp convert_from_struct(%{__struct__: name} = struct) do
-    struct
-    |> Helpers.to_tuple()
-    |> Tuple.insert_at(0, name)
-  end
+  defp to_struct(record, table) when is_tuple(record), do: Helpers.to_struct(record, table)
+
+  defp to_tuple(struct), do: Helpers.to_tuple(struct)
 end

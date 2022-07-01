@@ -6,13 +6,13 @@ defmodule ActiveMemory.Adapters.Ets do
 
   def all(table) do
     :ets.tab2list(table)
-    |> Task.async_stream(fn record -> Helpers.to_struct(record, table) end)
+    |> Task.async_stream(fn record -> to_struct(record, table) end)
     |> Enum.into([], fn {:ok, struct} -> struct end)
   end
 
   def create_table(table, _options) do
     try do
-      :ets.new(table, [:named_table, :public, read_concurrency: true])
+      :ets.new(table, [:named_table, :public, keypos: 2])
       :ok
     rescue
       ArgumentError -> {:error, :create_table_failed}
@@ -20,7 +20,7 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   def delete(struct, table) do
-    with ets_tuple when is_tuple(ets_tuple) <- Helpers.to_tuple(struct),
+    with ets_tuple when is_tuple(ets_tuple) <- to_tuple(struct),
          true <- :ets.delete_object(table, ets_tuple) do
       :ok
     else
@@ -74,7 +74,7 @@ defmodule ActiveMemory.Adapters.Ets do
 
   def write(struct, table) do
     with ets_tuple when is_tuple(ets_tuple) <-
-           Helpers.to_tuple(struct),
+           to_tuple(struct),
          true <- :ets.insert(table, ets_tuple) do
       {:ok, struct}
     else
@@ -96,7 +96,7 @@ defmodule ActiveMemory.Adapters.Ets do
     Enum.into(records, [], fn record -> to_struct(record, table) end)
   end
 
-  defp to_struct(record, table) when is_tuple(record) do
-    Helpers.to_struct(record, table)
-  end
+  defp to_struct(record, table) when is_tuple(record), do: Helpers.to_struct(record, table)
+
+  defp to_tuple(record), do: Helpers.to_tuple(record)
 end
