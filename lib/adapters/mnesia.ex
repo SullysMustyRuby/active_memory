@@ -125,15 +125,18 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   defp build_mnesia_match_spec(query, table) do
-    [{match_head, query, result}] = MatchSpec.build(query, table)
-    [{Tuple.insert_at(match_head, 0, table), query, result}]
+    query_map = :erlang.apply(table, :__meta__, []) |> Map.get(:query_map)
+    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:mnesia_match_head)
+
+    MatchSpec.build(query, query_map, match_head)
   end
 
   defp to_struct(records, table) when is_list(records) do
     Enum.into(records, [], &to_struct(&1, table))
   end
 
-  defp to_struct(record, table) when is_tuple(record), do: Helpers.to_struct(record, table)
+  defp to_struct(record, table) when is_tuple(record),
+    do: Helpers.to_struct(record, table, :mnesia)
 
-  defp to_tuple(struct), do: Helpers.to_tuple(struct)
+  defp to_tuple(struct), do: Helpers.to_tuple(struct, :mnesia)
 end

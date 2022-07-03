@@ -11,7 +11,6 @@ defmodule ActiveMemory.Adapters.EtsTest do
   setup_all do
     {:ok, pid} = DogStore.start_link()
 
-    # on_exit(fn -> :ets.delete(Dog) end)
     on_exit(fn -> Process.exit(pid, :kill) end)
 
     {:ok, %{pid: pid}}

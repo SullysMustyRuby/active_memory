@@ -12,7 +12,7 @@ defmodule ActiveMemory.Adapters.Ets do
 
   def create_table(table, _options) do
     try do
-      :ets.new(table, [:named_table, :public, keypos: 2])
+      :ets.new(table, [:named_table, :public])
       :ok
     rescue
       ArgumentError -> {:error, :create_table_failed}
@@ -88,7 +88,10 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   defp select_query(query, table) do
-    match_query = MatchSpec.build(query, table)
+    query_map = :erlang.apply(table, :__meta__, []) |> Map.get(:query_map)
+    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:ets_match_head)
+
+    match_query = MatchSpec.build(query, query_map, match_head)
     :ets.select(table, match_query)
   end
 
@@ -96,7 +99,7 @@ defmodule ActiveMemory.Adapters.Ets do
     Enum.into(records, [], fn record -> to_struct(record, table) end)
   end
 
-  defp to_struct(record, table) when is_tuple(record), do: Helpers.to_struct(record, table)
+  defp to_struct(record, table) when is_tuple(record), do: Helpers.to_struct(record, table, :ets)
 
-  defp to_tuple(record), do: Helpers.to_tuple(record)
+  defp to_tuple(record), do: Helpers.to_tuple(record, :ets)
 end

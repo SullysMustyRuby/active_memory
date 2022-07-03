@@ -4,12 +4,21 @@ defmodule ActiveMemory.DefinitionTest do
   alias ActiveMemory.Definition
   alias Test.Support.Dogs.Dog
 
-  describe "build_match_head/1" do
+  describe "build_ets_match_head/1" do
+    test "returns a tuple formatted for simple key list" do
+      query_map = [name: :"$1", breed: :"$2", weight: :"$3", fixed?: :"$4"]
+
+      assert {:"$1", :"$2", :"$3", :"$4"} ==
+               Definition.build_ets_match_head(query_map, Dog)
+    end
+  end
+
+  describe "build_mnesia_match_head/1" do
     test "returns a tuple formatted for simple key list" do
       query_map = [name: :"$1", breed: :"$2", weight: :"$3", fixed?: :"$4"]
 
       assert {Dog, :"$1", :"$2", :"$3", :"$4"} ==
-               Definition.build_match_head(query_map, Dog)
+               Definition.build_mnesia_match_head(query_map, Dog)
     end
   end
 

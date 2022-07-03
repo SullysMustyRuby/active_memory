@@ -5,7 +5,13 @@ defmodule ActiveMemory.Definition do
 
   def set_adapter(:mnesia), do: Mnesia
 
-  def build_match_head(query_map, table_name) do
+  def build_ets_match_head(query_map, _table_name) do
+    query_map
+    |> Enum.into([], fn {_key, value} -> value end)
+    |> List.to_tuple()
+  end
+
+  def build_mnesia_match_head(query_map, table_name) do
     query_map
     |> Enum.into([], fn {_key, value} -> value end)
     |> List.to_tuple()

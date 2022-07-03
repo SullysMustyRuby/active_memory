@@ -1,12 +1,8 @@
 defmodule ActiveMemory.Query.MatchSpec do
   @result [:"$_"]
 
-  def build(query, table) do
-    query_map = :erlang.apply(table, :__meta__, []) |> Map.get(:query_map)
-    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:match_head)
-    guards = reduce(query, query_map)
-
-    [{match_head, [guards], @result}]
+  def build(query, query_map, match_head) do
+    [{match_head, [reduce(query, query_map)], @result}]
   end
 
   defp reduce({operand, lhs, rhs}, query_map) when is_tuple(lhs) and is_tuple(rhs) do
