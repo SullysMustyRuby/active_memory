@@ -39,5 +39,5 @@ defmodule ActiveMemory.Query.MatchSpec do
 
   defp translate(:!==), do: :"=/="
 
-  defp(translate(operand), do: operand)
+  defp translate(operand), do: operand
 end

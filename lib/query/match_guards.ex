@@ -2,24 +2,22 @@ defmodule ActiveMemory.Query.MatchGuards do
   @moduledoc false
 
   def build(table, query_map) do
-    keywords = Map.to_list(query_map)
-
-    table.__meta__()
-    |> validate_query(keywords)
-    |> build_match_tuple(keywords)
+    table.__meta__.attributes
+    |> validate_query(query_map)
+    |> build_match_tuple(query_map)
   end
 
-  defp validate_query(%{attributes: attributes}, keywords) do
-    case Enum.all?(keywords, fn {key, _value} -> Enum.member?(attributes, key) end) do
+  defp validate_query(attributes, query_map) do
+    case Enum.all?(query_map, fn {key, _value} -> Enum.member?(attributes, key) end) do
       true -> {:ok, attributes}
       false -> {:error, :query_schema_mismatch}
     end
   end
 
-  defp build_match_tuple({:ok, attributes}, keywords) do
+  defp build_match_tuple({:ok, attributes}, query_map) do
     query =
       attributes
-      |> Enum.into([], fn key -> Keyword.get(keywords, key, :_) end)
+      |> Enum.into([], fn key -> Map.get(query_map, key, :_) end)
       |> List.to_tuple()
 
     {:ok, query}

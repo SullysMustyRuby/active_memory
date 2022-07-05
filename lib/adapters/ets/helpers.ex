@@ -9,15 +9,6 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
     |> List.to_tuple()
   end
 
-  def to_struct(tuple, module) when is_tuple(tuple),
-    do: struct(module, build_struct(module.__meta__.attributes, tuple))
-
-  def to_tuple(%{__struct__: module} = struct) do
-    module.__meta__.attributes
-    |> Enum.into([], fn key -> Map.get(struct, key) end)
-    |> List.to_tuple()
-  end
-
   def build_options(:defaults), do: [:set, :public]
 
   def build_options(options) do
@@ -31,6 +22,15 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
     attributes
     |> Enum.with_index(fn element, index -> {element, elem(tuple, index)} end)
     |> Enum.into(%{})
+  end
+
+  def to_struct(tuple, module) when is_tuple(tuple),
+    do: struct(module, build_struct(module.__meta__.attributes, tuple))
+
+  def to_tuple(%{__struct__: module} = struct) do
+    module.__meta__.attributes
+    |> Enum.into([], fn key -> Map.get(struct, key) end)
+    |> List.to_tuple()
   end
 
   defp validate_option(:type, type) do

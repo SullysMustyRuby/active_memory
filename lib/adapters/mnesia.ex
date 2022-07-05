@@ -26,7 +26,9 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   def create_table(table, _options) do
-    options = [{:ram_copies, [node()]}, attributes: table.__meta__.attributes]
+    options =
+      [attributes: table.__meta__.attributes]
+      |> Keyword.merge(table.__meta__.table_options)
 
     case :mnesia.create_table(table, options) do
       {:atomic, :ok} ->
