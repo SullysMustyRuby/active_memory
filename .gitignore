@@ -24,3 +24,6 @@ active_memory-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+#ingore apple file stuff
+*.DS_Store
