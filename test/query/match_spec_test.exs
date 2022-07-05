@@ -11,7 +11,7 @@ defmodule ActiveMemory.Query.MatchSpecTest do
       query = match(:breed == "PitBull" and :weight > 40 and :fixed? == false)
 
       query_map = :erlang.apply(Dog, :__meta__, []) |> Map.get(:query_map)
-      match_head = :erlang.apply(Dog, :__meta__, []) |> Map.get(:ets_match_head)
+      match_head = :erlang.apply(Dog, :__meta__, []) |> Map.get(:match_head)
 
       [{match_head, query, result}] = MatchSpec.build(query, query_map, match_head)
 

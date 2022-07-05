@@ -1,22 +1,61 @@
 defmodule ActiveMemory.Store do
   @moduledoc """
   The Store 
+
+  ## Store API
+  - `Store.all/0` Get all records stored
+  - `Store.delete/1` Delete the record provided
+  - `Store.delete_all/0` Delete all records stored
+  - `Store.one/1` Get one record matching either an attributes search or `match` query
+  - `Store.select/1` Get all records matching either an attributes search or `match` query
+  - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
+  - `Store.write/1` Write a record into the memmory table
+
+  ## Seeding
+  When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.
+  ```elixir
+  defmodule MyApp.People.Store do
+  use ActiveMemory.Store,
+    table: MyApp.People.Person,
+    seed_file: Path.expand("person_seeds.exs", __DIR__)
+  end
+  ```
+
+  ## Before `init`
+  All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments.
+  ```elixir
+  defmodule MyApp.People.Store do
+  use ActiveMemory.Store,
+    table: MyApp.People.Person,
+    before_init: [{:run_me, ["arg1", "arg2", ...]}, {:run_me_too, []}]
+  end
+  ```
+
+  ## Initial State
+  All stores are `GenServers` and thus have a state. The default state is an array as such:
+  ```elixir
+  %{started_at: "date time when first started", table: MyApp.People.Store}
+  ```
+  This default state can be overwritten with a new state structure or values by supplying a method and arguments as a tuple to the keyword `initial_state`.
+
+  ```elixir
+  defmodule MyApp.People.Store do
+  use ActiveMemory.Store,
+    table: MyApp.People.Person,
+    initial_state: {:initial_state_method, ["arg1", "arg2", ...]}
+  end
+  ```
   """
-  alias ActiveMemory.Definition
 
   defmacro __using__(opts) do
-    opts = Macro.expand(opts, __CALLER__)
-
     quote do
       import unquote(__MODULE__)
 
       use GenServer
 
-      opts = unquote(opts)
+      opts = unquote(Macro.expand(opts, __CALLER__))
 
-      @table_name Keyword.get(opts, :table)
-      @table_type Keyword.get(opts, :type, :mnesia)
-      @adapter Definition.set_adapter(@table_type)
+      @table Keyword.get(opts, :table)
       @before_init Keyword.get(opts, :before_init, :default)
       @seed_file Keyword.get(opts, :seed_file, nil)
       @initial_state Keyword.get(opts, :initial_state, :default)
@@ -36,15 +75,15 @@ defmodule ActiveMemory.Store do
       end
 
       @spec all() :: list(map())
-      def all, do: :erlang.apply(@adapter, :all, [@table_name])
+      def all, do: :erlang.apply(@table.adapter(), :all, [@table])
 
       def create_table do
-        :erlang.apply(@adapter, :create_table, [@table_name, []])
+        :erlang.apply(@table.adapter(), :create_table, [@table, []])
       end
 
       @spec all() :: :ok | {:error, any()}
-      def delete(%{__struct__: @table_name} = struct) do
-        :erlang.apply(@adapter, :delete, [struct, @table_name])
+      def delete(%{__struct__: @table} = struct) do
+        :erlang.apply(@table.adapter(), :delete, [struct, @table])
       end
 
       def delete(nil), do: :ok
@@ -53,12 +92,12 @@ defmodule ActiveMemory.Store do
 
       @spec delete_all() :: :ok | {:error, any()}
       def delete_all do
-        :erlang.apply(@adapter, :delete_all, [@table_name])
+        :erlang.apply(@table.adapter(), :delete_all, [@table])
       end
 
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query) do
-        :erlang.apply(@adapter, :one, [query, @table_name])
+        :erlang.apply(@table.adapter(), :one, [query, @table])
       end
 
       def reload_seeds do
@@ -67,11 +106,11 @@ defmodule ActiveMemory.Store do
 
       @spec select(map() | list(any())) :: {:ok, list(map())} | {:error, any()}
       def select(query) when is_map(query) do
-        :erlang.apply(@adapter, :select, [query, @table_name])
+        :erlang.apply(@table.adapter(), :select, [query, @table])
       end
 
       def select({_operand, _lhs, _rhs} = query) do
-        :erlang.apply(@adapter, :select, [query, @table_name])
+        :erlang.apply(@table.adapter(), :select, [query, @table])
       end
 
       def select(_), do: {:error, :bad_select_query}
@@ -92,8 +131,8 @@ defmodule ActiveMemory.Store do
       end
 
       @spec write(map()) :: {:ok, map()} | {:error, any()}
-      def write(%@table_name{} = struct) do
-        :erlang.apply(@adapter, :write, [struct, @table_name])
+      def write(%@table{} = struct) do
+        :erlang.apply(@table.adapter(), :write, [struct, @table])
       end
 
       def write(_), do: {:error, :bad_schema}
@@ -126,7 +165,7 @@ defmodule ActiveMemory.Store do
         {:ok,
          %{
            started_at: DateTime.utc_now(),
-           table_name: @table_name
+           table_name: @table
          }}
       end
 

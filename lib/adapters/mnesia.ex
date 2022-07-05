@@ -1,6 +1,8 @@
 defmodule ActiveMemory.Adapters.Mnesia do
+  @moduledoc false
+
   alias ActiveMemory.Adapter
-  alias ActiveMemory.Adapter.Helpers
+  alias ActiveMemory.Adapters.Mnesia.Helpers
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
 
   @behaviour Adapter
@@ -126,7 +128,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
   defp build_mnesia_match_spec(query, table) do
     query_map = :erlang.apply(table, :__meta__, []) |> Map.get(:query_map)
-    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:mnesia_match_head)
+    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:match_head)
 
     MatchSpec.build(query, query_map, match_head)
   end
@@ -136,7 +138,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   defp to_struct(record, table) when is_tuple(record),
-    do: Helpers.to_struct(record, table, :mnesia)
+    do: Helpers.to_struct(record, table)
 
-  defp to_tuple(struct), do: Helpers.to_tuple(struct, :mnesia)
+  defp to_tuple(struct), do: Helpers.to_tuple(struct)
 end

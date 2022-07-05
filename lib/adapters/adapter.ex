@@ -1,4 +1,6 @@
 defmodule ActiveMemory.Adapter do
+  @moduledoc false
+
   @callback all(atom()) :: list(map())
 
   @callback create_table(atom(), map()) :: :ok | {:error, any()}

@@ -1,4 +1,6 @@
 defmodule ActiveMemory.Query.MatchSpec do
+  @moduledoc false
+
   @result [:"$_"]
 
   def build(query, query_map, match_head) do

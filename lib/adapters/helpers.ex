@@ -1,29 +1,36 @@
 defmodule ActiveMemory.Adapter.Helpers do
-  def to_tuple(%{__struct__: module} = struct, :ets),
-    do: build_tuple(module.__meta__.attributes, struct)
+  @moduledoc false
+  alias ActiveMemory.Adapters.{Ets, Mnesia}
+  alias ActiveMemory.Adapters.Ets.Helpers, as: EtsHelpers
+  alias ActiveMemory.Adapters.Mnesia.Helpers, as: MnesiaHelpers
 
-  def to_tuple(%{__struct__: module} = struct, :mnesia) do
-    module.__meta__.attributes
-    |> build_tuple(struct)
-    |> Tuple.insert_at(0, module)
+  def build_match_head(query_map, _table_name, :ets) do
+    EtsHelpers.build_match_head(query_map)
   end
 
-  def to_struct(tuple, module, :ets) when is_tuple(tuple),
-    do: struct(module, build_struct(module.__meta__.attributes, tuple))
-
-  def to_struct(tuple, module, :mnesia) when is_tuple(tuple) do
-    struct(module, build_struct(module.__meta__.attributes, Tuple.delete_at(tuple, 0)))
+  def build_match_head(query_map, table_name, :mnesia) do
+    MnesiaHelpers.build_match_head(query_map, table_name)
   end
 
-  defp build_struct(attributes, tuple) do
-    attributes
-    |> Enum.with_index(fn element, index -> {element, elem(tuple, index)} end)
-    |> Enum.into(%{})
+  def build_options(options, :ets), do: EtsHelpers.build_options(options)
+
+  def build_options(options, :mnesia), do: MnesiaHelpers.build_options(options)
+
+  def build_query_map(struct_attrs) do
+    Enum.with_index(struct_attrs, fn element, index ->
+      {strip_defaults(element), :"$#{index + 1}"}
+    end)
   end
 
-  defp build_tuple(attributes, struct) do
-    attributes
-    |> Enum.into([], fn key -> Map.get(struct, key) end)
-    |> List.to_tuple()
+  def build_struct_keys(struct_attrs) do
+    Enum.into(struct_attrs, [], fn element -> strip_defaults(element) end)
   end
+
+  def set_adapter(:ets), do: Ets
+
+  def set_adapter(:mnesia), do: Mnesia
+
+  defp strip_defaults(element) when is_atom(element), do: element
+
+  defp strip_defaults({element, _defaults}) when is_atom(element), do: element
 end
