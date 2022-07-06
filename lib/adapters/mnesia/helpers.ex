@@ -1,4 +1,6 @@
 defmodule ActiveMemory.Adapters.Mnesia.Helpers do
+  @moduledoc false
+
   @types [:set, :ordered_set, :bag]
 
   def build_match_head(query_map, table_name) do
@@ -8,7 +10,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Helpers do
     |> Tuple.insert_at(0, table_name)
   end
 
-  def build_options(:defaults), do: @default_options
+  def build_options(:defaults), do: []
 
   def build_options(options) do
     options

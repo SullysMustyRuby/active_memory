@@ -1,15 +1,15 @@
 defmodule ActiveMemory.Store do
   @moduledoc """
-  The Store 
+  # The Store 
 
   ## Store API
-  - `Store.all/0` Get all records stored
-  - `Store.delete/1` Delete the record provided
-  - `Store.delete_all/0` Delete all records stored
-  - `Store.one/1` Get one record matching either an attributes search or `match` query
-  - `Store.select/1` Get all records matching either an attributes search or `match` query
-  - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
-  - `Store.write/1` Write a record into the memmory table
+    - `Store.all/0` Get all records stored  
+    - `Store.delete/1` Delete the record provided
+    - `Store.delete_all/0` Delete all records stored
+    - `Store.one/1` Get one record matching either an attributes search or `match` query
+    - `Store.select/1` Get all records matching either an attributes search or `match` query
+    - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
+    - `Store.write/1` Write a record into the memmory table
 
   ## Seeding
   When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.

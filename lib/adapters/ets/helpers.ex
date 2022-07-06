@@ -1,4 +1,6 @@
 defmodule ActiveMemory.Adapters.Ets.Helpers do
+  @moduledoc false
+
   @types [:set, :ordered_set, :bag, :duplicate_bag]
   @access [:public, :protected, :private]
   @default_options [type: :set, access: :public]
@@ -47,6 +49,9 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
     end
   end
 
+  defp validate_option(:decentralized_counters, true),
+    do: {:decentralized_counters, true}
+
   defp validate_option(:compressed, true),
     do: :compressed
 
@@ -55,6 +60,9 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
 
   defp validate_option(:write_concurrency, true),
     do: {:write_concurrency, true}
+
+  defp validate_option(:write_concurrency, :auto),
+    do: {:write_concurrency, :auto}
 
   defp validate_option(_key, _value), do: nil
 end

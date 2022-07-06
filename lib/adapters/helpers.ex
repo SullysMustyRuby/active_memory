@@ -1,5 +1,6 @@
 defmodule ActiveMemory.Adapter.Helpers do
   @moduledoc false
+
   alias ActiveMemory.Adapters.{Ets, Mnesia}
   alias ActiveMemory.Adapters.Ets.Helpers, as: EtsHelpers
   alias ActiveMemory.Adapters.Mnesia.Helpers, as: MnesiaHelpers
