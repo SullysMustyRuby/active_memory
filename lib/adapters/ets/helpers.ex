@@ -20,12 +20,6 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
     |> Enum.reject(&is_nil/1)
   end
 
-  defp build_struct(attributes, tuple) do
-    attributes
-    |> Enum.with_index(fn element, index -> {element, elem(tuple, index)} end)
-    |> Enum.into(%{})
-  end
-
   def to_struct(tuple, module) when is_tuple(tuple),
     do: struct(module, build_struct(module.__meta__.attributes, tuple))
 
@@ -33,6 +27,12 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
     module.__meta__.attributes
     |> Enum.into([], fn key -> Map.get(struct, key) end)
     |> List.to_tuple()
+  end
+
+  defp build_struct(attributes, tuple) do
+    attributes
+    |> Enum.with_index(fn element, index -> {element, elem(tuple, index)} end)
+    |> Enum.into(%{})
   end
 
   defp validate_option(:type, type) do

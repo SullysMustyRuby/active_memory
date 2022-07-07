@@ -1,5 +1,5 @@
 defmodule ActiveMemory.StoreTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case
 
   alias Test.Support.Dogs.Dog
   alias Test.Support.Dogs.Store, as: DogStore

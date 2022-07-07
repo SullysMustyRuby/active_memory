@@ -1,5 +1,5 @@
 defmodule ActiveMemory.Adapters.MneisaTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case
   doctest ActiveMemory
 
   alias Test.Support.People.Person

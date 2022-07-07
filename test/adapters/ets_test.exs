@@ -11,6 +11,7 @@ defmodule ActiveMemory.Adapters.EtsTest do
   setup_all do
     {:ok, pid} = DogStore.start_link()
 
+    on_exit(fn -> :ets.delete(Dog) end)
     on_exit(fn -> Process.exit(pid, :kill) end)
 
     {:ok, %{pid: pid}}
@@ -195,8 +196,20 @@ defmodule ActiveMemory.Adapters.EtsTest do
       end
     end
 
+    test "suceeds with a variable in the match" do
+      weight = 40
+      query = match(:weight <= weight)
+      {:ok, dogs} = DogStore.select(query)
+
+      for dog <- dogs do
+        assert dog.weight <= 40
+      end
+    end
+
     test "returns the records that match a multiple 'or' query" do
-      query = match(:breed == "PitBull" or :breed == "Labrador" or :weight >= 50)
+      weight = 50
+      query = match(:breed == "PitBull" or :breed == "Labrador" or :weight >= weight)
+
       {:ok, dogs} = DogStore.select(query)
 
       assert length(dogs) == 6

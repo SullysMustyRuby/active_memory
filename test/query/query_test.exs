@@ -11,15 +11,10 @@ defmodule ActiveMemory.QueryTest do
       assert {:or, {:and, {:==, :name, "erin"}, {:==, :name, "tiberious"}}, {:<, :age, 35}} ==
                match((:name == "erin" and :name == "tiberious") or :age < 35)
     end
+
+    test "resolves variables in the match" do
+      now = DateTime.utc_now()
+      assert match(:date == now) == {:==, :date, now}
+    end
   end
 end
-
-# :ets.fun2ms(fn {name, age, type} when name == "erin" and age > 30 or type == "hello" -> {name, age} end)
-
-# [
-#   {{:"$1", :"$2", :"$3"},
-#    [
-#      {:orelse, {:andalso, {:==, :"$1", "erin"}, {:>, :"$2", 30}},
-#       {:==, :"$3", "hello"}}
-#    ], [{{:"$1", :"$2"}}]}
-# ]

@@ -6,7 +6,7 @@ defmodule ActiveMemory.MixProject do
   @github "https://github.com/SullysMustyRuby/active_memory"
   @license "MIT"
   @name "ActiveMemory"
-  @version "0.1.0"
+  @version "0.1.1"
 
   def project do
     [

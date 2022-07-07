@@ -2,6 +2,7 @@ defmodule ActiveMemory.Adapters.Ets.HelpersTest do
   use ExUnit.Case
 
   alias ActiveMemory.Adapters.Ets.Helpers
+  alias Test.Support.Dogs.Dog
 
   describe "build_match_head/1" do
     test "returns a tuple formatted for simple key list" do
@@ -10,12 +11,6 @@ defmodule ActiveMemory.Adapters.Ets.HelpersTest do
       assert {:"$1", :"$2", :"$3", :"$4"} ==
                Helpers.build_match_head(query_map)
     end
-  end
-
-  describe "to_struct/2" do
-  end
-
-  describe "to_tuple/1" do
   end
 
   describe "build_options/1" do
@@ -47,5 +42,36 @@ defmodule ActiveMemory.Adapters.Ets.HelpersTest do
       assert [:set, :public] == Helpers.build_options(:defaults)
       assert [:set, :public] == Helpers.build_options([])
     end
+  end
+
+  describe "to_struct/2" do
+    test "returns a valid struct for the module provided" do
+      dog =
+        {"gem", "Shaggy Black Lab", 30, ~U[2022-07-07 19:47:50.978684Z], false, %{toy: "frizbee"}}
+
+      assert Helpers.to_struct(dog, Dog) == %Dog{
+               dob: ~U[2022-07-07 19:47:50.978684Z],
+               name: "gem",
+               breed: "Shaggy Black Lab",
+               nested: %{toy: "frizbee"},
+               weight: 30,
+               fixed?: false
+             }
+    end
+  end
+
+  describe "to_tuple/1" do
+    dog = %Dog{
+      dob: ~U[2022-07-07 19:47:50.978684Z],
+      name: "gem",
+      breed: "Shaggy Black Lab",
+      nested: %{toy: "frizbee"},
+      weight: 30,
+      fixed?: false
+    }
+
+    assert Helpers.to_tuple(dog) ==
+             {"gem", "Shaggy Black Lab", 30, ~U[2022-07-07 19:47:50.978684Z], false,
+              %{toy: "frizbee"}}
   end
 end

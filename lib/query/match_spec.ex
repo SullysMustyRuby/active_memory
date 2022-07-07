@@ -31,6 +31,8 @@ defmodule ActiveMemory.Query.MatchSpec do
     {translate(operand), variable, value}
   end
 
+  defp reduce({atom, meta, _} = ast, _query_map) when is_atom(atom) and is_list(meta), do: ast
+
   defp translate(:<=), do: :"=<"
 
   defp translate(:!=), do: :"/="
