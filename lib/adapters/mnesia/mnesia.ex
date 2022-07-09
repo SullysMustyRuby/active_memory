@@ -15,16 +15,6 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end
   end
 
-  def copy_table(table) do
-    case :mnesia.add_table_copy(table, Node.self(), :ram_copies) do
-      {:atomic, :ok} ->
-        :ok
-
-      {:error, message} ->
-        {:error, message}
-    end
-  end
-
   def create_table(table, _options) do
     options =
       [attributes: table.__meta__.attributes]
@@ -34,7 +24,10 @@ defmodule ActiveMemory.Adapters.Mnesia do
       {:atomic, :ok} ->
         :ok
 
-      {:error, {:already_exists, _table}} ->
+      {:aborted, {:already_exists, _table}} ->
+        copy_table(table)
+
+      {:aborted, {:already_exists, _table, _node}} ->
         copy_table(table)
 
       {:error, message} ->
@@ -101,6 +94,19 @@ defmodule ActiveMemory.Adapters.Mnesia do
     case write_object(to_tuple(struct), table) do
       {:atomic, :ok} -> {:ok, struct}
       {:error, message} -> {:error, message}
+    end
+  end
+
+  defp copy_table(table) do
+    case :mnesia.add_table_copy(table, Node.self(), :ram_copies) do
+      {:atomic, :ok} ->
+        :ok
+
+      {:aborted, {:already_exists, _table, _node}} ->
+        :ok
+
+      {:error, message} ->
+        {:error, message}
     end
   end
 

@@ -1,7 +1,6 @@
 defmodule Test.Support.Dogs.Store do
   use ActiveMemory.Store,
     table: Test.Support.Dogs.Dog,
-    type: :ets,
     before_init: [{:run_me, ["Blue"]}],
     initial_state: {:initial_state, ["value", "next_value"]}
 
