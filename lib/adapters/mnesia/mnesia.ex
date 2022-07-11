@@ -22,7 +22,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
     case :mnesia.create_table(table, options) do
       {:atomic, :ok} ->
-        :ok
+        :mnesia.wait_for_tables([table], 5000)
 
       {:aborted, {:already_exists, _table}} ->
         copy_table(table)
@@ -100,7 +100,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   defp copy_table(table) do
     case :mnesia.add_table_copy(table, Node.self(), :ram_copies) do
       {:atomic, :ok} ->
-        :ok
+        :mnesia.wait_for_tables([table], 5000)
 
       {:aborted, {:already_exists, _table, _node}} ->
         :ok
