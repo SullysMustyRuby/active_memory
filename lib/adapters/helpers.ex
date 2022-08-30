@@ -13,6 +13,14 @@ defmodule ActiveMemory.Adapter.Helpers do
     MnesiaHelpers.build_match_head(query_map, table_name)
   end
 
+  def build_match_head(query_map, _table_name, Ets) do
+    EtsHelpers.build_match_head(query_map)
+  end
+
+  def build_match_head(query_map, table_name, Mnesia) do
+    MnesiaHelpers.build_match_head(query_map, table_name)
+  end
+
   def build_options(options, :ets), do: EtsHelpers.build_options(options)
 
   def build_options(options, :mnesia), do: MnesiaHelpers.build_options(options)

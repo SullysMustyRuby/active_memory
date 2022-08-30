@@ -1,12 +1,14 @@
 defmodule ActiveMemory.Table.Attributes do
-  defmacro __using__(_) do
+  alias ActiveMemory.Adapter.Helpers
+
+  defmacro __using__(opts) do
     quote do
       import ActiveMemory.Table.Attributes, only: [attributes: 2]
 
       @primary_key nil
       @timestamps_opts []
       @foreign_key_type :uuid
-      @attributes_prefix nil
+      # @attributes_prefix nil
       @attributes_context nil
       @field_source_mapper fn x -> x end
 
@@ -23,6 +25,23 @@ defmodule ActiveMemory.Table.Attributes do
       # Module.register_attribute(__MODULE__, :active_memory_redact_fields, accumulate: true)
       # Module.put_attribute(__MODULE__, :active_memory_derive_inspect_for_redacted_fields, true)
       Module.put_attribute(__MODULE__, :active_memory_autogenerate_uuid, nil)
+
+      opts = unquote(Macro.expand(opts, __CALLER__))
+
+      # @struct_attrs Keyword.get(opts, :attributes)
+      table_type = Keyword.get(opts, :type, :mnesia)
+      # @adapter Helpers.set_adapter(@table_type)
+      # query_map = Helpers.build_query_map(@struct_attrs)
+
+      table_options = Keyword.get(opts, :options, :defaults)
+
+      Module.put_attribute(__MODULE__, :adapter, Helpers.set_adapter(table_type))
+
+      Module.put_attribute(
+        __MODULE__,
+        :table_options,
+        Helpers.build_options(table_options, table_type)
+      )
     end
   end
 
@@ -39,13 +58,13 @@ defmodule ActiveMemory.Table.Attributes do
 
         meta? = unquote(meta?)
         source = unquote(source)
-        prefix = @attributes_prefix
+        # prefix = @attributes_prefix
         context = @attributes_context
 
         meta = %{
           state: :built,
           source: source,
-          prefix: prefix,
+          # prefix: prefix,
           context: context,
           attributes: __MODULE__
         }
@@ -89,9 +108,13 @@ defmodule ActiveMemory.Table.Attributes do
         autogenerate = @active_memory_autogenerate |> Enum.reverse()
         # autoupdate = @active_memory_autoupdate |> Enum.reverse()
         fields = @active_memory_fields |> Enum.reverse()
-        query_fields = @active_memory_query_fields |> Enum.reverse()
+        active_memory_query_fields = @active_memory_query_fields |> Enum.reverse()
         # virtual_fields = @active_memory_virtual_fields |> Enum.reverse()
         field_sources = @active_memory_field_sources |> Enum.reverse()
+
+        query_fields = Enum.map(active_memory_query_fields, &elem(&1, 0))
+        query_map = Helpers.build_query_map(query_fields)
+
         # assocs = @active_memory_assocs |> Enum.reverse()
         # embeds = @active_memory_embeds |> Enum.reverse()
         # redacted_fields = @active_memory_redact_fields
@@ -109,16 +132,23 @@ defmodule ActiveMemory.Table.Attributes do
           %{unquote_splicing(Macro.escape(@active_memory_changeset_fields))}
         end
 
-        def __attributes__(:prefix), do: unquote(prefix)
+        # def __attributes__(:prefix), do: unquote(prefix)
         # def __attributes__(:source), do: unquote(source)
+
         def __attributes__(:fields), do: unquote(Enum.map(fields, &elem(&1, 0)))
-        def __attributes__(:query_fields), do: unquote(Enum.map(query_fields, &elem(&1, 0)))
+        def __attributes__(:query_fields), do: unquote(query_fields)
         def __attributes__(:primary_key), do: unquote(primary_key_fields)
-        def __attributes__(:hash), do: unquote(:erlang.phash2({primary_key_fields, query_fields}))
+        def __attributes__(:query_map), do: unquote(query_map)
+
+        # def __attributes__(:hash), do: unquote(:erlang.phash2({primary_key_fields, query_fields}))
         # def __attributes__(:read_after_writes), do: unquote(Enum.reverse(@active_memory_raw))
 
         def __attributes__(:autogenerate_uuid),
           do: unquote(Macro.escape(@active_memory_autogenerate_uuid))
+
+        def __attributes__(:adapter), do: unquote(Macro.escape(@adapter))
+
+        def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
 
         def __attributes__(:autogenerate), do: unquote(Macro.escape(autogenerate))
         # def __attributes__(:autoupdate), do: unquote(Macro.escape(autoupdate))
@@ -134,6 +164,29 @@ defmodule ActiveMemory.Table.Attributes do
         #     }
         #   }
         # end
+        def __attributes__(:match_head),
+          do:
+            Helpers.build_match_head(
+              unquote(query_map),
+              unquote(__MODULE__),
+              unquote(Macro.escape(@adapter))
+            )
+
+        # def __attributes__(:match_head),
+        #   do:
+        #     Helpers.build_match_head(
+        #       unquote(query_fields),
+        #       unquote(__MODULE__),
+        #       unquote(Macro.escape(@adapter))
+        #     )
+
+        # def __attributes__(:query_map) do
+        #   Helpers.
+        # end
+
+        # defp strip_defaults(element) when is_atom(element), do: element
+
+        # defp strip_defaults({element, _defaults}) when is_atom(element), do: element
 
         for clauses <-
               ActiveMemory.Table.Attributes.__attributes__(
