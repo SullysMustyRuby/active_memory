@@ -333,8 +333,13 @@ defmodule ActiveMemory.Adapters.EtsTest do
       }
 
       assert DogStore.all() == []
-      assert {:ok, record} == DogStore.write(record)
-      assert DogStore.all() == [record]
+      {:ok, _record} = DogStore.write(record)
+      [new_record] = DogStore.all()
+      assert new_record.breed == "Shaggy Black Lab"
+      assert new_record.weight == "30"
+      assert new_record.fixed? == false
+      assert new_record.name == "gem"
+      assert assert new_record.uuid != nil
     end
 
     test "returns error for a record with no schema" do

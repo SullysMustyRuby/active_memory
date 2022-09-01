@@ -15,13 +15,13 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     {:ok, %{pid: pid}}
   end
 
-  setup do
-    on_exit(fn -> :mnesia.clear_table(Person) end)
-
-    :ok
-  end
-
   describe "all/0" do
+    setup do
+      on_exit(fn -> :mnesia.clear_table(Person) end)
+
+      :ok
+    end
+
     test "retuns all records" do
       write_seeds()
       people = PeopleStore.all()
@@ -41,6 +41,8 @@ defmodule ActiveMemory.Adapters.MneisaTest do
   describe "delete/1" do
     setup do
       write_seeds()
+
+      on_exit(fn -> :mnesia.clear_table(Person) end)
 
       :ok
     end
@@ -79,6 +81,8 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     setup do
       write_seeds()
 
+      on_exit(fn -> :mnesia.clear_table(Person) end)
+
       :ok
     end
 
@@ -109,6 +113,8 @@ defmodule ActiveMemory.Adapters.MneisaTest do
 
     setup do
       write_seeds()
+
+      on_exit(fn -> :mnesia.clear_table(Person) end)
 
       :ok
     end
@@ -141,6 +147,12 @@ defmodule ActiveMemory.Adapters.MneisaTest do
   end
 
   describe "select/1 with a map query" do
+    setup do
+      on_exit(fn -> :mnesia.clear_table(Person) end)
+
+      :ok
+    end
+
     test "returns all records matching the query" do
       for hair_color <- ["bald", "blonde", "black", "blue"] do
         %Person{
@@ -181,6 +193,8 @@ defmodule ActiveMemory.Adapters.MneisaTest do
 
     setup do
       write_seeds()
+
+      on_exit(fn -> :mnesia.clear_table(Person) end)
 
       :ok
     end
@@ -247,6 +261,8 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     setup do
       write_seeds()
 
+      on_exit(fn -> :mnesia.clear_table(Person) end)
+
       :ok
     end
 
@@ -279,6 +295,8 @@ defmodule ActiveMemory.Adapters.MneisaTest do
 
     setup do
       write_seeds()
+
+      on_exit(fn -> :mnesia.clear_table(Person) end)
 
       :ok
     end
@@ -315,6 +333,12 @@ defmodule ActiveMemory.Adapters.MneisaTest do
   end
 
   describe "write/1" do
+    setup do
+      on_exit(fn -> :mnesia.clear_table(Person) end)
+
+      :ok
+    end
+
     test "writes the record with the correct schema" do
       record = %Person{
         email: "test@here.com",
@@ -324,8 +348,13 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       }
 
       assert PeopleStore.all() == []
-      assert {:ok, record} == PeopleStore.write(record)
-      assert PeopleStore.all() == [record]
+      {:ok, _record} = PeopleStore.write(record)
+      [new_record] = PeopleStore.all()
+      assert new_record.email == "test@here.com"
+      assert new_record.first == "erin"
+      assert new_record.last == "boeger"
+      assert new_record.hair_color == "bald"
+      assert new_record.uuid != nil
     end
 
     test "returns error for a record with no schema" do

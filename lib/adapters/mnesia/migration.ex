@@ -3,7 +3,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   @default_table_copy_type :ram_copies
 
   def migrate_table_options(table) do
-    table.__meta__.table_options
+    table.__attributes__(:table_options)
     |> migrate_access_mode(table)
     |> migrate_disc_copies(table)
     |> migrate_disc_only_copies(table)

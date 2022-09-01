@@ -1,8 +1,8 @@
 defmodule Test.Support.Whales.Whale do
-  use ActiveMemory.Table.Attributes,
+  use ActiveMemory.Table,
     options: [index: [:first, :last, :email]]
 
-  attributes "whales" do
+  attributes do
     field(:email, :string)
     field(:first, :string)
     field(:last, :string)

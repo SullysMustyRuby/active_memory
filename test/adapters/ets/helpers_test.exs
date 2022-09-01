@@ -47,9 +47,11 @@ defmodule ActiveMemory.Adapters.Ets.HelpersTest do
   describe "to_struct/2" do
     test "returns a valid struct for the module provided" do
       dog =
-        {"gem", "Shaggy Black Lab", 30, ~U[2022-07-07 19:47:50.978684Z], false, %{toy: "frizbee"}}
+        {"some-uuid", "gem", "Shaggy Black Lab", 30, ~U[2022-07-07 19:47:50.978684Z], false,
+         %{toy: "frizbee"}}
 
       assert Helpers.to_struct(dog, Dog) == %Dog{
+               uuid: "some-uuid",
                dob: ~U[2022-07-07 19:47:50.978684Z],
                name: "gem",
                breed: "Shaggy Black Lab",
@@ -62,6 +64,7 @@ defmodule ActiveMemory.Adapters.Ets.HelpersTest do
 
   describe "to_tuple/1" do
     dog = %Dog{
+      uuid: "some-uuid",
       dob: ~U[2022-07-07 19:47:50.978684Z],
       name: "gem",
       breed: "Shaggy Black Lab",
@@ -71,7 +74,7 @@ defmodule ActiveMemory.Adapters.Ets.HelpersTest do
     }
 
     assert Helpers.to_tuple(dog) ==
-             {"gem", "Shaggy Black Lab", 30, ~U[2022-07-07 19:47:50.978684Z], false,
+             {"some-uuid", "gem", "Shaggy Black Lab", 30, ~U[2022-07-07 19:47:50.978684Z], false,
               %{toy: "frizbee"}}
   end
 end

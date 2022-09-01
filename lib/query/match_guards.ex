@@ -2,7 +2,7 @@ defmodule ActiveMemory.Query.MatchGuards do
   @moduledoc false
 
   def build(table, query_map) do
-    table.__meta__.attributes
+    table.__attributes__(:query_fields)
     |> validate_query(query_map)
     |> build_match_tuple(query_map)
   end

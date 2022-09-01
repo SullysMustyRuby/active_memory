@@ -36,9 +36,11 @@ defmodule ActiveMemory.Adapters.Mnesia.HelpersTest do
 
   describe "to_struct/2" do
     test "returns a valid struct for the module provided" do
-      person = {Person, "caprica@galactica.com", "caprica", "boeger", "blonde", 31, true}
+      person =
+        {Person, "some-uuid", "caprica@galactica.com", "caprica", "boeger", "blonde", 31, true}
 
       assert Helpers.to_struct(person, Person) == %Person{
+               uuid: "some-uuid",
                email: "caprica@galactica.com",
                first: "caprica",
                last: "boeger",
@@ -51,6 +53,7 @@ defmodule ActiveMemory.Adapters.Mnesia.HelpersTest do
 
   describe "to_tuple/1" do
     person = %Person{
+      uuid: "some-uuid",
       email: "caprica@galactica.com",
       first: "caprica",
       last: "boeger",
@@ -60,6 +63,7 @@ defmodule ActiveMemory.Adapters.Mnesia.HelpersTest do
     }
 
     assert Helpers.to_tuple(person) ==
-             {Person, "caprica@galactica.com", "caprica", "boeger", "blonde", 31, true}
+             {Person, "some-uuid", "caprica@galactica.com", "caprica", "boeger", "blonde", 31,
+              true}
   end
 end

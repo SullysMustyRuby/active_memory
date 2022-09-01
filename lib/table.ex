@@ -6,18 +6,18 @@ defmodule ActiveMemory.Table do
 
   Example Table:
   ```elixir
-  defmodule MyApp.People.Person do
-  use ActiveMemory.Table attributes: [
-    :uuid, 
-    :email, 
-    :first_name,
-    :last_name,
-    :department,
-    :start_date,
-    :active,
-    :admin?
-    complex: %{more: "complex", keys: "can be used", with: "defaults"}
-  ]
+  defmodule Test.Support.People.Person do
+    use ActiveMemory.Table,
+      options: [index: [:last, :cylon?]]
+
+    attributes do
+      field :email, :string
+      field :first, :string
+      field :last, :string
+      field :hair_color, :string
+      field :age, :integer
+      field :cylon?, :boolean
+    end
   end
   ```
 
@@ -30,7 +30,6 @@ defmodule ActiveMemory.Table do
   Example:
   ```elixir
   use ActiveMemory.Table,
-    attributes: [:name, :breed, :weight, fixed?: true, nested: %{one: nil, default: true}],
     type: :ets,
     options: [compressed: true, read_concurrency: true, type: :protected]
   ```
@@ -115,28 +114,293 @@ defmodule ActiveMemory.Table do
 
   defmacro __using__(opts) do
     quote do
-      import unquote(__MODULE__)
+      import ActiveMemory.Table, only: [attributes: 1]
+
+      @primary_key nil
+      @timestamps_opts []
+      @foreign_key_type :uuid
+      @attributes_context nil
+      @field_source_mapper fn x -> x end
+
+      Module.register_attribute(__MODULE__, :active_memory_primary_keys, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_fields, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_query_fields, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_field_sources, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_assocs, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_autogenerate, accumulate: true)
+      Module.put_attribute(__MODULE__, :active_memory_autogenerate_uuid, nil)
 
       opts = unquote(Macro.expand(opts, __CALLER__))
 
-      @struct_attrs Keyword.get(opts, :attributes)
-      @table_type Keyword.get(opts, :type, :mnesia)
-      @adapter Helpers.set_adapter(@table_type)
-      @query_map Helpers.build_query_map(@struct_attrs)
-      @table_options Keyword.get(opts, :options, :defaults)
+      table_type = Keyword.get(opts, :type, :mnesia)
 
-      defstruct @struct_attrs
+      table_options = Keyword.get(opts, :options, :defaults)
 
-      def __meta__,
-        do: %{
-          adapter: @adapter,
-          attributes: Helpers.build_struct_keys(@struct_attrs),
-          match_head: Helpers.build_match_head(@query_map, __MODULE__, @table_type),
-          query_map: @query_map,
-          table_options: Helpers.build_options(@table_options, @table_type)
+      Module.put_attribute(__MODULE__, :adapter, Helpers.set_adapter(table_type))
+
+      Module.put_attribute(
+        __MODULE__,
+        :table_options,
+        Helpers.build_options(table_options, table_type)
+      )
+    end
+  end
+
+  defmacro attributes(do: block) do
+    attributes(__CALLER__, true, :id, block)
+  end
+
+  defp attributes(caller, meta?, type, block) do
+    prelude =
+      quote do
+        @after_compile ActiveMemory.Table
+        Module.register_attribute(__MODULE__, :active_memory_changeset_fields, accumulate: true)
+        Module.register_attribute(__MODULE__, :active_memory_struct_fields, accumulate: true)
+
+        meta? = unquote(meta?)
+        context = @attributes_context
+
+        meta = %{
+          state: :built,
+          context: context,
+          attributes: __MODULE__
         }
 
-      def adapter, do: @adapter
+        if @primary_key == nil do
+          @primary_key {:uuid, :string, autogenerate: true}
+        end
+
+        primary_key_fields =
+          case @primary_key do
+            false ->
+              []
+
+            {name, type, opts} ->
+              ActiveMemory.Table.__field__(
+                __MODULE__,
+                name,
+                type,
+                [primary_key: true] ++ opts
+              )
+
+              [name]
+
+            other ->
+              raise ArgumentError, "@primary_key must be false or {name, type, opts}"
+          end
+
+        try do
+          import ActiveMemory.Table
+          unquote(block)
+        after
+          :ok
+        end
+      end
+
+    postlude =
+      quote unquote: false do
+        primary_key_fields = @active_memory_primary_keys |> Enum.reverse()
+        autogenerate = @active_memory_autogenerate |> Enum.reverse()
+        fields = @active_memory_fields |> Enum.reverse()
+        active_memory_query_fields = @active_memory_query_fields |> Enum.reverse()
+        field_sources = @active_memory_field_sources |> Enum.reverse()
+
+        query_fields = Enum.map(active_memory_query_fields, &elem(&1, 0))
+        query_map = Helpers.build_query_map(query_fields)
+
+        # assocs = @active_memory_assocs |> Enum.reverse()
+
+        loaded = ActiveMemory.Table.__loaded__(__MODULE__, @active_memory_struct_fields)
+
+        defstruct Enum.reverse(@active_memory_struct_fields)
+
+        def __changeset__ do
+          %{unquote_splicing(Macro.escape(@active_memory_changeset_fields))}
+        end
+
+        def __attributes__(:fields), do: unquote(Enum.map(fields, &elem(&1, 0)))
+
+        def __attributes__(:query_fields), do: unquote(query_fields)
+
+        def __attributes__(:primary_key), do: unquote(primary_key_fields)
+
+        def __attributes__(:query_map), do: unquote(query_map)
+
+        def __attributes__(:autogenerate_uuid),
+          do: unquote(Macro.escape(@active_memory_autogenerate_uuid))
+
+        def __attributes__(:adapter), do: unquote(Macro.escape(@adapter))
+
+        def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
+
+        def __attributes__(:autogenerate), do: unquote(Macro.escape(autogenerate))
+
+        def __attributes__(:loaded), do: unquote(Macro.escape(loaded))
+
+        def __attributes__(:match_head),
+          do:
+            Helpers.build_match_head(
+              unquote(query_map),
+              unquote(__MODULE__),
+              unquote(Macro.escape(@adapter))
+            )
+
+        for clauses <-
+              ActiveMemory.Table.__attributes__(
+                fields,
+                field_sources
+              ),
+            {args, body} <- clauses do
+          def __attributes__(unquote_splicing(args)), do: unquote(body)
+        end
+      end
+
+    quote do
+      unquote(prelude)
+      unquote(postlude)
     end
+  end
+
+  defmacro field(name, type \\ :string, opts \\ []) do
+    quote do
+      ActiveMemory.Table.__field__(
+        __MODULE__,
+        unquote(name),
+        unquote(type),
+        unquote(opts)
+      )
+    end
+  end
+
+  # defmacro has_many(name, struct, opts \\ []) do
+  #   %{type: :has_many, name: name, struct: struct, opts: opts}
+  # end
+
+  @doc false
+  def __field__(mod, name, type, opts) do
+    # Check the field type before we check options because it is
+    # better to raise unknown type first than unsupported option.
+    # type = check_field_type!(mod, name, type, opts)
+
+    # check_options!(type, opts, @field_opts, "field/3")
+    Module.put_attribute(mod, :active_memory_changeset_fields, {name, type})
+    # validate_default!(type, opts[:default], opts[:skip_default_validation])
+    define_field(mod, name, type, opts)
+  end
+
+  @doc false
+  def __loaded__(module, struct_fields) do
+    Map.new([{:__struct__, module} | struct_fields])
+    # case Map.new([{:__struct__, module} | struct_fields]) do
+    #   %{__meta__: meta} = struct -> %{struct | __meta__: Map.put(meta, :state, :loaded)}
+    #   struct -> struct
+    # end
+  end
+
+  @doc false
+  def __after_compile__(%{module: module} = env, _) do
+    # If we are compiling code, we can validate associations now,
+    # as the Elixir compiler will solve dependencies.
+    #
+    # TODO: Use Code.can_await_module_compilation?/0 from Elixir v1.10+.
+    # if Process.info(self(), :error_handler) == {:error_handler, Kernel.ErrorHandler} do
+    #   for name <- module.__attributes__(:associations) do
+    #     assoc = module.__attributes__(:association, name)
+
+    #     case assoc.__struct__.after_compile_validation(assoc, env) do
+    #       :ok ->
+    #         :ok
+
+    #       {:error, message} ->
+    #         IO.warn(
+    #           "invalid association `#{assoc.field}` in schema #{inspect(module)}: #{message}",
+    #           Macro.Env.stacktrace(env)
+    #         )
+    #     end
+    #   end
+    # end
+
+    :ok
+  end
+
+  @doc false
+  def __attributes__(fields, field_sources) do
+    load =
+      for {name, type} <- fields do
+        if alias = field_sources[name] do
+          {name, {:source, alias, type}}
+        else
+          {name, type}
+        end
+      end
+
+    dump =
+      for {name, type} <- fields do
+        {name, {field_sources[name] || name, type}}
+      end
+
+    field_sources_quoted =
+      for {name, _type} <- fields do
+        {[:field_source, name], field_sources[name] || name}
+      end
+
+    types_quoted =
+      for {name, type} <- fields do
+        {[:type, name], Macro.escape(type)}
+      end
+
+    # assoc_quoted =
+    #   for {name, refl} <- assocs do
+    #     {[:association, name], Macro.escape(refl)}
+    #   end
+
+    # assoc_names = Enum.map(assocs, &elem(&1, 0))
+
+    single_arg = [
+      {[:dump], dump |> Map.new() |> Macro.escape()},
+      {[:load], load |> Macro.escape()}
+      # {[:associations], assoc_names},
+    ]
+
+    catch_all = [
+      {[:field_source, quote(do: _)], nil},
+      {[:type, quote(do: _)], nil}
+      # {[:association, quote(do: _)], nil},
+    ]
+
+    [
+      single_arg,
+      field_sources_quoted,
+      types_quoted,
+      # assoc_quoted,
+      catch_all
+    ]
+  end
+
+  defp define_field(mod, name, type, opts) do
+    virtual? = opts[:virtual] || false
+    pk? = opts[:primary_key] || false
+    put_struct_field(mod, name, Keyword.get(opts, :default))
+
+    if pk? do
+      Module.put_attribute(mod, :active_memory_primary_keys, name)
+    end
+
+    if Keyword.get(opts, :load_in_query, true) do
+      Module.put_attribute(mod, :active_memory_query_fields, {name, type})
+    end
+
+    Module.put_attribute(mod, :active_memory_fields, {name, type})
+  end
+
+  defp put_struct_field(mod, name, assoc) do
+    fields = Module.get_attribute(mod, :active_memory_struct_fields)
+
+    if List.keyfind(fields, name, 0) do
+      raise ArgumentError,
+            "field/association #{inspect(name)} already exists on schema, you must either remove the duplication or choose a different name"
+    end
+
+    Module.put_attribute(mod, :active_memory_struct_fields, {name, assoc})
   end
 end
