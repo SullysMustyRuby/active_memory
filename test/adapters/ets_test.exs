@@ -1,5 +1,5 @@
 defmodule ActiveMemory.Adapters.EtsTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case
   doctest ActiveMemory
 
   alias Test.Support.Dogs.Dog
@@ -27,7 +27,7 @@ defmodule ActiveMemory.Adapters.EtsTest do
       write_seeds()
       dogs = DogStore.all()
 
-      assert length(dogs) == 10
+      assert length(dogs) == 11
     end
 
     test "returns empty list if table empty" do

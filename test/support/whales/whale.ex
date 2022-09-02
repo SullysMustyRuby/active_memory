@@ -3,10 +3,10 @@ defmodule Test.Support.Whales.Whale do
     options: [index: [:first, :last, :email]]
 
   attributes do
-    field(:email, :string)
-    field(:first, :string)
-    field(:last, :string)
-    field(:hair_color, :string)
-    field(:age, :integer)
+    field(:email)
+    field(:first)
+    field(:last)
+    field(:hair_color)
+    field(:age)
   end
 end

@@ -4,11 +4,11 @@ defmodule Test.Support.Dogs.Dog do
     options: [compressed: true, read_concurrency: true]
 
   attributes do
-    field(:name, :string)
-    field(:breed, :string)
-    field(:weight, :integer)
-    field(:dob, :string)
-    field(:fixed?, :boolean, default: true)
-    field(:nested, :map)
+    field(:name)
+    field(:breed)
+    field(:weight)
+    field(:dob)
+    field(:fixed?, default: true)
+    field(:nested)
   end
 end

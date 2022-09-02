@@ -23,7 +23,6 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     end
 
     test "retuns all records" do
-      write_seeds()
       people = PeopleStore.all()
 
       assert length(people) == 10

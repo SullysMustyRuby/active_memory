@@ -4,4 +4,4 @@ Code.require_file("support/people/person.ex", __DIR__)
 Code.require_file("support/people/store.ex", __DIR__)
 Code.require_file("support/whales/whale.ex", __DIR__)
 
-ExUnit.start()
+ExUnit.start(max_cases: 1, seed: 0)
