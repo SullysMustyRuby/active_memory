@@ -27,7 +27,7 @@ defmodule ActiveMemory.Adapters.EtsTest do
       write_seeds()
       dogs = DogStore.all()
 
-      assert length(dogs) == 10
+      assert length(dogs) == 11
     end
 
     test "returns empty list if table empty" do
