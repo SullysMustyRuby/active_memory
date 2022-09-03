@@ -112,6 +112,13 @@ defmodule ActiveMemory.Table do
   """
   alias ActiveMemory.Adapter.Helpers
 
+  @type attributes :: %{optional(atom) => any, __struct__: atom, __meta__: Metadata.t()}
+  @type t :: attributes
+  @type belongs_to(t) :: t | ActiveMemory.Association.NotLoaded.t()
+  @type has_one(t) :: t | ActiveMemory.Association.NotLoaded.t()
+  @type has_many(t) :: [t] | ActiveMemory.Association.NotLoaded.t()
+  @type many_to_many(t) :: [t] | ActiveMemory.Association.NotLoaded.t()
+
   defmacro __using__(opts) do
     quote do
       import ActiveMemory.Table, only: [attributes: 1, attributes: 2]
@@ -196,8 +203,7 @@ defmodule ActiveMemory.Table do
         field_sources = @active_memory_field_sources |> Enum.reverse()
         query_fields = Enum.map(active_memory_query_fields, & &1)
         query_map = Helpers.build_query_map(query_fields)
-
-        # assocs = @active_memory_assocs |> Enum.reverse()
+        assocs = @active_memory_assocs |> Enum.reverse()
 
         loaded = ActiveMemory.Table.__loaded__(__MODULE__, @active_memory_struct_fields)
 
@@ -256,9 +262,69 @@ defmodule ActiveMemory.Table do
     end
   end
 
-  # defmacro has_many(name, struct, opts \\ []) do
-  #   %{type: :has_many, name: name, struct: struct, opts: opts}
+  defmacro has_many(name, queryable, opts \\ []) do
+    queryable = expand_alias(queryable, __CALLER__)
+
+    quote do
+      ActiveMemory.Table.__has_many__(
+        __MODULE__,
+        unquote(name),
+        unquote(queryable),
+        unquote(opts)
+      )
+    end
+  end
+
+  # defmacro has_one(name, queryable, opts \\ []) do
+  #   queryable = expand_alias(queryable, __CALLER__)
+
+  #   quote do
+  #     ActiveMemory.Table.__has_one__(__MODULE__, unquote(name), unquote(queryable), unquote(opts))
+  #   end
   # end
+
+  defmacro belongs_to(name, queryable, opts \\ []) do
+    queryable = expand_alias(queryable, __CALLER__)
+
+    quote do
+      ActiveMemory.Table.__belongs_to__(
+        __MODULE__,
+        unquote(name),
+        unquote(queryable),
+        unquote(opts)
+      )
+    end
+  end
+
+  # defmacro many_to_many(name, queryable, opts \\ []) do
+  #   queryable = expand_alias(queryable, __CALLER__)
+  #   opts = expand_alias_in_key(opts, :join_through, __CALLER__)
+
+  #   quote do
+  #     ActiveMemory.Table.__many_to_many__(
+  #       __MODULE__,
+  #       unquote(name),
+  #       unquote(queryable),
+  #       unquote(opts)
+  #     )
+  #   end
+  # end
+
+  @spec association(module, :one | :many, atom(), module, Keyword.t()) ::
+          ActiveMemory.Association.t()
+  def association(schema, cardinality, name, association, opts) do
+    not_loaded = %ActiveMemory.Association.NotLoaded{
+      __owner__: schema,
+      __field__: name,
+      __cardinality__: cardinality
+    }
+
+    put_struct_field(schema, name, not_loaded)
+    opts = [cardinality: cardinality] ++ opts
+    struct = association.struct(schema, name, opts)
+    Module.put_attribute(schema, :active_memory_assocs, {name, struct})
+    struct
+  end
 
   @doc false
   def __field__(mod, name, opts) do
@@ -309,56 +375,114 @@ defmodule ActiveMemory.Table do
   end
 
   @doc false
-  def __attributes__(fields, field_sources) do
-    load =
-      for name <- fields do
-        if alias = field_sources[name] do
-          {name, {:source, alias}}
-        else
-          name
-        end
-      end
+  def __has_many__(mod, name, queryable, opts) do
+    if is_list(queryable) and Keyword.has_key?(queryable, :through) do
+      check_options!(queryable, @valid_has_options, "has_many/3")
+      association(mod, :many, name, ActiveMemory.Association.HasThrough, queryable)
+    else
+      check_options!(opts, @valid_has_options, "has_many/3")
 
-    dump =
-      for name <- fields do
-        {name, field_sources[name] || name}
-      end
+      struct =
+        association(
+          mod,
+          :many,
+          name,
+          ActiveMemory.Association.Has,
+          [queryable: queryable] ++ opts
+        )
 
-    field_sources_quoted =
-      for name <- fields do
-        {[:field_source, name], field_sources[name] || name}
-      end
-
-    # types_quoted =
-    #   for {name, type} <- fields do
-    #     {[:type, name], Macro.escape(type)}
-    #   end
-
-    # assoc_quoted =
-    #   for {name, refl} <- assocs do
-    #     {[:association, name], Macro.escape(refl)}
-    #   end
-
-    # assoc_names = Enum.map(assocs, &elem(&1, 0))
-
-    single_arg = [
-      {[:dump], dump |> Map.new() |> Macro.escape()},
-      {[:load], load |> Macro.escape()}
-      # {[:associations], assoc_names},
-    ]
-
-    catch_all = [
-      {[:field_source, quote(do: _)], nil}
-      # {[:association, quote(do: _)], nil},
-    ]
-
-    [
-      single_arg,
-      field_sources_quoted,
-      # assoc_quoted,
-      catch_all
-    ]
+      Module.put_attribute(mod, :ecto_changeset_fields, {name, {:assoc, struct}})
+    end
   end
+
+  # @doc false
+  # def __has_one__(mod, name, queryable, opts) do
+  #   if is_list(queryable) and Keyword.has_key?(queryable, :through) do
+  #     check_options!(queryable, @valid_has_options, "has_one/3")
+  #     association(mod, :one, name, ActiveMemory.Association.HasThrough, queryable)
+  #   else
+  #     check_options!(opts, @valid_has_options, "has_one/3")
+
+  #     struct =
+  #       association(mod, :one, name, ActiveMemory.Association.Has, [queryable: queryable] ++ opts)
+
+  #     Module.put_attribute(mod, :ecto_changeset_fields, {name, {:assoc, struct}})
+  #   end
+  # end
+
+  # :primary_key is valid here to support associative entity
+  # https://en.wikipedia.org/wiki/Associative_entity
+  @valid_belongs_to_options [
+    :foreign_key,
+    :references,
+    :define_field,
+    :type,
+    :on_replace,
+    :defaults,
+    :primary_key,
+    :source,
+    :where
+  ]
+
+  @doc false
+  def __belongs_to__(mod, name, queryable, opts) do
+    opts = Keyword.put_new(opts, :foreign_key, :"#{name}_id")
+
+    foreign_key_name = opts[:foreign_key]
+    foreign_key_type = opts[:type] || Module.get_attribute(mod, :foreign_key_type)
+    foreign_key_type = check_field_type!(mod, name, foreign_key_type, opts)
+    check_options!(foreign_key_type, opts, @valid_belongs_to_options, "belongs_to/3")
+
+    if foreign_key_name == name do
+      raise ArgumentError,
+            "foreign_key #{inspect(name)} must be distinct from corresponding association name"
+    end
+
+    if Keyword.get(opts, :define_field, true) do
+      Module.put_attribute(mod, :ecto_changeset_fields, {foreign_key_name, foreign_key_type})
+      define_field(mod, foreign_key_name, foreign_key_type, opts)
+    end
+
+    struct =
+      association(
+        mod,
+        :one,
+        name,
+        ActiveMemory.Association.BelongsTo,
+        [queryable: queryable] ++ opts
+      )
+
+    Module.put_attribute(mod, :ecto_changeset_fields, {name, {:assoc, struct}})
+  end
+
+  # @valid_many_to_many_options [
+  #   :join_through,
+  #   :join_defaults,
+  #   :join_keys,
+  #   :on_delete,
+  #   :defaults,
+  #   :on_replace,
+  #   :unique,
+  #   :where,
+  #   :join_where,
+  #   :preload_order
+  # ]
+
+  # @doc false
+  # def __many_to_many__(mod, name, queryable, opts) do
+  #   check_options!(opts, @valid_many_to_many_options, "many_to_many/3")
+
+  #   struct =
+  #     association(
+  #       mod,
+  #       :many,
+  #       name,
+  #       ActiveMemory.Association.ManyToMany,
+  #       [queryable: queryable] ++ opts
+  #     )
+
+  #   Module.put_attribute(mod, :ecto_changeset_fields, {name, {:assoc, struct}})
+  # end
 
   defp define_field(mod, name, opts) do
     # virtual? = opts[:virtual] || false
@@ -385,5 +509,121 @@ defmodule ActiveMemory.Table do
     end
 
     Module.put_attribute(mod, :active_memory_struct_fields, {name, assoc})
+  end
+
+  @doc false
+  def __attributes__(fields, field_sources) do
+    load =
+      for name <- fields do
+        if alias = field_sources[name] do
+          {name, {:source, alias}}
+        else
+          name
+        end
+      end
+
+    dump =
+      for name <- fields do
+        {name, field_sources[name] || name}
+      end
+
+    field_sources_quoted =
+      for name <- fields do
+        {[:field_source, name], field_sources[name] || name}
+      end
+
+    # types_quoted =
+    #   for {name, type} <- fields do
+    #     {[:type, name], Macro.escape(type)}
+    #   end
+
+    assoc_quoted =
+      for {name, refl} <- assocs do
+        {[:association, name], Macro.escape(refl)}
+      end
+
+    assoc_names = Enum.map(assocs, &elem(&1, 0))
+
+    single_arg = [
+      {[:dump], dump |> Map.new() |> Macro.escape()},
+      {[:load], load |> Macro.escape()},
+      {[:associations], assoc_names}
+    ]
+
+    catch_all = [
+      {[:field_source, quote(do: _)], nil},
+      {[:association, quote(do: _)], nil}
+    ]
+
+    [
+      single_arg,
+      field_sources_quoted,
+      assoc_quoted,
+      catch_all
+    ]
+  end
+
+  defp check_options!(opts, valid, fun_arity) do
+    case Enum.find(opts, fn {k, _} -> k not in valid end) do
+      {k, _} -> raise ArgumentError, "invalid option #{inspect(k)} for #{fun_arity}"
+      nil -> :ok
+    end
+  end
+
+  defp check_options!({:parameterized, _, _}, _opts, _valid, _fun_arity) do
+    :ok
+  end
+
+  defp check_options!({_, type}, opts, valid, fun_arity) do
+    check_options!(type, opts, valid, fun_arity)
+  end
+
+  defp check_options!(_type, opts, valid, fun_arity) do
+    check_options!(opts, valid, fun_arity)
+  end
+
+  defp check_field_type!(_mod, name, :datetime, _opts) do
+    raise ArgumentError,
+          "invalid type :datetime for field #{inspect(name)}. " <>
+            "You probably meant to choose one between :naive_datetime " <>
+            "(no time zone information) or :utc_datetime (time zone is set to UTC)"
+  end
+
+  defp check_field_type!(mod, name, type, opts) do
+    cond do
+      composite?(type, name) ->
+        {outer_type, inner_type} = type
+        {outer_type, check_field_type!(mod, name, inner_type, opts)}
+
+      not is_atom(type) ->
+        raise ArgumentError, "invalid type #{inspect(type)} for field #{inspect(name)}"
+
+      ActiveMemory.Type.base?(type) ->
+        type
+
+      Code.ensure_compiled(type) == {:module, type} ->
+        cond do
+          function_exported?(type, :type, 0) ->
+            type
+
+          function_exported?(type, :type, 1) ->
+            ActiveMemory.ParameterizedType.init(
+              type,
+              Keyword.merge(opts, field: name, schema: mod)
+            )
+
+          function_exported?(type, :__schema__, 1) ->
+            raise ArgumentError,
+                  "schema #{inspect(type)} is not a valid type for field #{inspect(name)}." <>
+                    " Did you mean to use belongs_to, has_one, has_many, embeds_one, or embeds_many instead?"
+
+          true ->
+            raise ArgumentError,
+                  "module #{inspect(type)} given as type for field #{inspect(name)} is not an ActiveMemory.Type/ActiveMemory.ParameterizedType"
+        end
+
+      true ->
+        raise ArgumentError, "unknown type #{inspect(type)} for field #{inspect(name)}"
+    end
   end
 end
