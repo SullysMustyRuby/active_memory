@@ -3,11 +3,11 @@ defmodule Test.Support.People.Person do
     options: [index: [:last, :cylon?]]
 
   attributes do
-    field(:email, :string)
-    field(:first, :string)
-    field(:last, :string)
-    field(:hair_color, :string)
-    field(:age, :integer)
-    field(:cylon?, :boolean)
+    field(:email)
+    field(:first)
+    field(:last)
+    field(:hair_color)
+    field(:age)
+    field(:cylon?)
   end
 end
