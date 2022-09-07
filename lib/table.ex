@@ -6,18 +6,18 @@ defmodule ActiveMemory.Table do
 
   Example Table:
   ```elixir
-  defmodule MyApp.People.Person do
-  use ActiveMemory.Table attributes: [
-    :uuid, 
-    :email, 
-    :first_name,
-    :last_name,
-    :department,
-    :start_date,
-    :active,
-    :admin?
-    complex: %{more: "complex", keys: "can be used", with: "defaults"}
-  ]
+  defmodule Test.Support.People.Person do
+    use ActiveMemory.Table,
+      options: [index: [:last, :cylon?]]
+
+    attributes do
+      field :email
+      field :first
+      field :last
+      field :hair_color
+      field :age
+      field :cylon?
+    end
   end
   ```
 
@@ -30,7 +30,6 @@ defmodule ActiveMemory.Table do
   Example:
   ```elixir
   use ActiveMemory.Table,
-    attributes: [:name, :breed, :weight, fixed?: true, nested: %{one: nil, default: true}],
     type: :ets,
     options: [compressed: true, read_concurrency: true, type: :protected]
   ```
@@ -115,28 +114,201 @@ defmodule ActiveMemory.Table do
 
   defmacro __using__(opts) do
     quote do
-      import unquote(__MODULE__)
+      import ActiveMemory.Table, only: [attributes: 1, attributes: 2]
+
+      @primary_key nil
+
+      Module.register_attribute(__MODULE__, :active_memory_primary_keys, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_fields, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_query_fields, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_field_sources, accumulate: true)
+      Module.put_attribute(__MODULE__, :active_memory_autogenerate_uuid, nil)
 
       opts = unquote(Macro.expand(opts, __CALLER__))
 
-      @struct_attrs Keyword.get(opts, :attributes)
-      @table_type Keyword.get(opts, :type, :mnesia)
-      @adapter Helpers.set_adapter(@table_type)
-      @query_map Helpers.build_query_map(@struct_attrs)
-      @table_options Keyword.get(opts, :options, :defaults)
+      table_type = Keyword.get(opts, :type, :mnesia)
 
-      defstruct @struct_attrs
+      table_options = Keyword.get(opts, :options, :defaults)
 
-      def __meta__,
-        do: %{
-          adapter: @adapter,
-          attributes: Helpers.build_struct_keys(@struct_attrs),
-          match_head: Helpers.build_match_head(@query_map, __MODULE__, @table_type),
-          query_map: @query_map,
-          table_options: Helpers.build_options(@table_options, @table_type)
-        }
+      Module.put_attribute(__MODULE__, :adapter, Helpers.set_adapter(table_type))
 
-      def adapter, do: @adapter
+      Module.put_attribute(
+        __MODULE__,
+        :table_options,
+        Helpers.build_options(table_options, table_type)
+      )
     end
+  end
+
+  defmacro attributes(opts \\ nil, do: block) do
+    define_attributes(opts, block)
+  end
+
+  defmacro field(name, opts \\ []) do
+    quote do
+      ActiveMemory.Table.__field__(
+        __MODULE__,
+        unquote(name),
+        unquote(opts)
+      )
+    end
+  end
+
+  @doc false
+  def __after_compile__(%{module: _module}, _) do
+    :ok
+  end
+
+  @doc false
+  def __attributes__(fields, field_sources) do
+    load =
+      for name <- fields do
+        if alias = field_sources[name] do
+          {name, {:source, alias}}
+        else
+          name
+        end
+      end
+
+    dump =
+      for name <- fields do
+        {name, field_sources[name] || name}
+      end
+
+    field_sources_quoted =
+      for name <- fields do
+        {[:field_source, name], field_sources[name] || name}
+      end
+
+    single_arg = [
+      {[:dump], dump |> Map.new() |> Macro.escape()},
+      {[:load], load |> Macro.escape()}
+    ]
+
+    catch_all = [
+      {[:field_source, quote(do: _)], nil}
+    ]
+
+    [
+      single_arg,
+      field_sources_quoted,
+      catch_all
+    ]
+  end
+
+  @doc false
+  def __field__(mod, name, opts) do
+    define_field(mod, name, opts)
+  end
+
+  defp define_field(mod, name, opts) do
+    pk? = Keyword.get(opts, :primary_key) || false
+    put_struct_field(mod, name, Keyword.get(opts, :default))
+
+    if pk? do
+      Module.put_attribute(mod, :active_memory_primary_keys, name)
+    end
+
+    if Keyword.get(opts, :load_in_query, true) do
+      Module.put_attribute(mod, :active_memory_query_fields, name)
+    end
+
+    Module.put_attribute(mod, :active_memory_fields, name)
+  end
+
+  defp define_attributes(opts, block) do
+    prelude =
+      quote do
+        @after_compile ActiveMemory.Table
+
+        Module.register_attribute(__MODULE__, :active_memory_struct_fields, accumulate: true)
+
+        if @primary_key == nil do
+          @primary_key {:uuid, autogenerate: true}
+        end
+
+        primary_key_fields =
+          case @primary_key do
+            false ->
+              []
+
+            {name, opts} ->
+              ActiveMemory.Table.__field__(
+                __MODULE__,
+                name,
+                [primary_key: true] ++ opts
+              )
+
+              [name]
+
+            other ->
+              raise ArgumentError, "@primary_key must be false or {name, type, opts}"
+          end
+
+        try do
+          import ActiveMemory.Table
+          unquote(block)
+        after
+          :ok
+        end
+      end
+
+    postlude =
+      quote unquote: false do
+        primary_key_fields = @active_memory_primary_keys |> Enum.reverse()
+        fields = @active_memory_fields |> Enum.reverse()
+        active_memory_query_fields = @active_memory_query_fields |> Enum.reverse()
+        field_sources = @active_memory_field_sources |> Enum.reverse()
+        query_fields = Enum.map(active_memory_query_fields, & &1)
+        query_map = Helpers.build_query_map(query_fields)
+
+        defstruct Enum.reverse(@active_memory_struct_fields)
+
+        def __attributes__(:query_fields), do: unquote(query_fields)
+
+        def __attributes__(:primary_key), do: unquote(primary_key_fields)
+
+        def __attributes__(:query_map), do: unquote(query_map)
+
+        def __attributes__(:autogenerate_uuid),
+          do: unquote(Macro.escape(@active_memory_autogenerate_uuid))
+
+        def __attributes__(:adapter), do: unquote(Macro.escape(@adapter))
+
+        def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
+
+        def __attributes__(:match_head),
+          do:
+            Helpers.build_match_head(
+              unquote(query_map),
+              unquote(__MODULE__),
+              unquote(Macro.escape(@adapter))
+            )
+
+        for clauses <-
+              ActiveMemory.Table.__attributes__(
+                fields,
+                field_sources
+              ),
+            {args, body} <- clauses do
+          def __attributes__(unquote_splicing(args)), do: unquote(body)
+        end
+      end
+
+    quote do
+      unquote(prelude)
+      unquote(postlude)
+    end
+  end
+
+  defp put_struct_field(mod, name, assoc) do
+    fields = Module.get_attribute(mod, :active_memory_struct_fields)
+
+    if List.keyfind(fields, name, 0) do
+      raise ArgumentError,
+            "field/association #{inspect(name)} already exists on schema, you must either remove the duplication or choose a different name"
+    end
+
+    Module.put_attribute(mod, :active_memory_struct_fields, {name, assoc})
   end
 end

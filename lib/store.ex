@@ -75,15 +75,15 @@ defmodule ActiveMemory.Store do
       end
 
       @spec all() :: list(map())
-      def all, do: :erlang.apply(@table.adapter(), :all, [@table])
+      def all, do: :erlang.apply(@table.__attributes__(:adapter), :all, [@table])
 
       def create_table do
-        :erlang.apply(@table.adapter(), :create_table, [@table, []])
+        :erlang.apply(@table.__attributes__(:adapter), :create_table, [@table, []])
       end
 
       @spec all() :: :ok | {:error, any()}
       def delete(%{__struct__: @table} = struct) do
-        :erlang.apply(@table.adapter(), :delete, [struct, @table])
+        :erlang.apply(@table.__attributes__(:adapter), :delete, [struct, @table])
       end
 
       def delete(nil), do: :ok
@@ -92,12 +92,12 @@ defmodule ActiveMemory.Store do
 
       @spec delete_all() :: :ok | {:error, any()}
       def delete_all do
-        :erlang.apply(@table.adapter(), :delete_all, [@table])
+        :erlang.apply(@table.__attributes__(:adapter), :delete_all, [@table])
       end
 
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query) do
-        :erlang.apply(@table.adapter(), :one, [query, @table])
+        :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table])
       end
 
       def reload_seeds do
@@ -106,11 +106,11 @@ defmodule ActiveMemory.Store do
 
       @spec select(map() | list(any())) :: {:ok, list(map())} | {:error, any()}
       def select(query) when is_map(query) do
-        :erlang.apply(@table.adapter(), :select, [query, @table])
+        :erlang.apply(@table.__attributes__(:adapter), :select, [query, @table])
       end
 
       def select({_operand, _lhs, _rhs} = query) do
-        :erlang.apply(@table.adapter(), :select, [query, @table])
+        :erlang.apply(@table.__attributes__(:adapter), :select, [query, @table])
       end
 
       def select(_), do: {:error, :bad_select_query}
@@ -131,8 +131,17 @@ defmodule ActiveMemory.Store do
       end
 
       @spec write(map()) :: {:ok, map()} | {:error, any()}
+      def write(%@table{uuid: uuid} = struct) when is_binary(uuid) do
+        :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
+      end
+
+      def write(%@table{uuid: nil} = struct) do
+        with_uuid = Map.put(struct, :uuid, UUID.uuid4())
+        :erlang.apply(@table.__attributes__(:adapter), :write, [with_uuid, @table])
+      end
+
       def write(%@table{} = struct) do
-        :erlang.apply(@table.adapter(), :write, [struct, @table])
+        :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
       end
 
       def write(_), do: {:error, :bad_schema}

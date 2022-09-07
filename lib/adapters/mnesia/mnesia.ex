@@ -2,7 +2,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   @moduledoc false
 
   alias ActiveMemory.Adapter
-  alias ActiveMemory.Adapters.Mnesia.Helpers
+  alias ActiveMemory.Adapters.Mnesia.{Helpers, Migration}
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
 
   @behaviour Adapter
@@ -17,8 +17,8 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
   def create_table(table, _options) do
     options =
-      [attributes: table.__meta__.attributes]
-      |> Keyword.merge(table.__meta__.table_options)
+      [attributes: table.__attributes__(:query_fields)]
+      |> Keyword.merge(table.__attributes__(:table_options))
 
     case :mnesia.create_table(table, options) do
       {:atomic, :ok} ->
@@ -98,6 +98,8 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   defp copy_table(table) do
+    :ok = Migration.migrate_table_options(table)
+
     case :mnesia.add_table_copy(table, Node.self(), :ram_copies) do
       {:atomic, :ok} ->
         :mnesia.wait_for_tables([table], 5000)
@@ -135,8 +137,8 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   defp build_mnesia_match_spec(query, table) do
-    query_map = :erlang.apply(table, :__meta__, []) |> Map.get(:query_map)
-    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:match_head)
+    query_map = :erlang.apply(table, :__attributes__, [:query_map])
+    match_head = :erlang.apply(table, :__attributes__, [:match_head])
 
     MatchSpec.build(query, query_map, match_head)
   end

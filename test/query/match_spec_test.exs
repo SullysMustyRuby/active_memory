@@ -10,15 +10,15 @@ defmodule ActiveMemory.Query.MatchSpecTest do
     test "returns a properly formatted match_spec" do
       query = match(:breed == "PitBull" and :weight > 40 and :fixed? == false)
 
-      query_map = :erlang.apply(Dog, :__meta__, []) |> Map.get(:query_map)
-      match_head = :erlang.apply(Dog, :__meta__, []) |> Map.get(:match_head)
+      query_map = :erlang.apply(Dog, :__attributes__, [:query_map])
+      match_head = :erlang.apply(Dog, :__attributes__, [:match_head])
 
       [{match_head, query, result}] = MatchSpec.build(query, query_map, match_head)
 
-      assert match_head == {:"$1", :"$2", :"$3", :"$4", :"$5", :"$6"}
+      assert match_head == {:"$1", :"$2", :"$3", :"$4", :"$5", :"$6", :"$7"}
 
       assert query == [
-               {:and, {:and, {:==, :"$2", "PitBull"}, {:>, :"$3", 40}}, {:==, :"$5", false}}
+               {:and, {:and, {:==, :"$3", "PitBull"}, {:>, :"$4", 40}}, {:==, :"$6", false}}
              ]
 
       assert result == [:"$_"]
@@ -30,13 +30,13 @@ defmodule ActiveMemory.Query.MatchSpecTest do
       fixed = false
       query = match(:breed == breed and :weight > weight and :fixed? == fixed)
 
-      query_map = :erlang.apply(Dog, :__meta__, []) |> Map.get(:query_map)
-      match_head = :erlang.apply(Dog, :__meta__, []) |> Map.get(:match_head)
+      query_map = :erlang.apply(Dog, :__attributes__, [:query_map])
+      match_head = :erlang.apply(Dog, :__attributes__, [:match_head])
 
       [{_match_head, query, _result}] = MatchSpec.build(query, query_map, match_head)
 
       assert query == [
-               {:and, {:and, {:==, :"$2", "PitBull"}, {:>, :"$3", 40}}, {:==, :"$5", false}}
+               {:and, {:and, {:==, :"$3", "PitBull"}, {:>, :"$4", 40}}, {:==, :"$6", false}}
              ]
     end
   end

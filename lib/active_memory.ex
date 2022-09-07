@@ -13,17 +13,18 @@ defmodule ActiveMemory do
 
   Example Table:
   ```elixir
-  defmodule MyApp.People.Person do
-  use ActiveMemory.Table attributes: [
-    :uuid, 
-    :email, 
-    :first_name,
-    :last_name,
-    :department,
-    :start_date,
-    :active,
-    :admin?
-  ]
+  defmodule Test.Support.People.Person do
+    use ActiveMemory.Table,
+      options: [index: [:last, :cylon?]]
+
+    attributes do
+      field :email
+      field :first
+      field :last
+      field :hair_color
+      field :age
+      field :cylon?
+    end
   end
   ```
   Example Mnesia Store (default):
@@ -37,7 +38,6 @@ defmodule ActiveMemory do
   ```elixir
   defmodule MyApp.People.Store do
   use ActiveMemory.Store,
-    table: MyApp.People.Person,
     type: :ets
   end
   ```

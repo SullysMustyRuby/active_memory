@@ -14,7 +14,7 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   def create_table(table, _options) do
-    options = table.__meta__.table_options
+    options = table.__attributes__(:table_options)
 
     try do
       :ets.new(table, [:named_table | options])
@@ -93,8 +93,8 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   defp select_query(query, table) do
-    query_map = :erlang.apply(table, :__meta__, []) |> Map.get(:query_map)
-    match_head = :erlang.apply(table, :__meta__, []) |> Map.get(:match_head)
+    query_map = :erlang.apply(table, :__attributes__, [:query_map])
+    match_head = :erlang.apply(table, :__attributes__, [:match_head])
 
     match_query = MatchSpec.build(query, query_map, match_head)
     :ets.select(table, match_query)

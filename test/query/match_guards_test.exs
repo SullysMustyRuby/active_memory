@@ -18,7 +18,7 @@ defmodule ActiveMemory.Query.MatchGuardsTest do
     test "returns the query strings in the correct positions" do
       query_map = %{last: "boeger", age: 35}
 
-      assert {:ok, {:_, :_, "boeger", :_, 35, :_}} == MatchGuards.build(Person, query_map)
+      assert {:ok, {:_, :_, :_, "boeger", :_, 35, :_}} == MatchGuards.build(Person, query_map)
     end
 
     test "returns error for keys that do not match" do
@@ -32,7 +32,7 @@ defmodule ActiveMemory.Query.MatchGuardsTest do
       age = 35
       query_map = %{last: last, age: age}
 
-      assert {:ok, {:_, :_, "boeger", :_, 35, :_}} == MatchGuards.build(Person, query_map)
+      assert {:ok, {:_, :_, :_, "boeger", :_, 35, :_}} == MatchGuards.build(Person, query_map)
     end
   end
 end

@@ -19,10 +19,14 @@ defmodule ActiveMemory.Adapters.Mnesia.Helpers do
   end
 
   def to_struct(tuple, module) when is_tuple(tuple),
-    do: struct(module, build_struct(module.__meta__.attributes, Tuple.delete_at(tuple, 0)))
+    do:
+      struct(
+        module,
+        build_struct(module.__attributes__(:query_fields), Tuple.delete_at(tuple, 0))
+      )
 
   def to_tuple(%{__struct__: module} = struct) do
-    module.__meta__.attributes
+    module.__attributes__(:query_fields)
     |> Enum.into([], fn key -> Map.get(struct, key) end)
     |> List.to_tuple()
     |> Tuple.insert_at(0, module)
