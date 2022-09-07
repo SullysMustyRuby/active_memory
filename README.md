@@ -21,16 +21,17 @@ Your app is ready!
 Example Table:
 ```elixir
 defmodule MyApp.People.Person do
-  use ActiveMemory.Table attributes: [
-    :uuid, 
-    :email, 
-    :first_name,
-    :last_name,
-    :department,
-    :start_date,
-    :active,
-    :admin?
-  ]
+  use ActiveMemory.Table,
+    options: [index: [:last, :cylon?]]
+
+  attributes do
+    field(:email)
+    field(:first)
+    field(:last)
+    field(:hair_color)
+    field(:age)
+    field(:cylon?)
+  end
 end
 ```
 Example Mnesia Store (default):
