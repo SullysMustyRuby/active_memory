@@ -117,16 +117,11 @@ defmodule ActiveMemory.Table do
       import ActiveMemory.Table, only: [attributes: 1, attributes: 2]
 
       @primary_key nil
-      @timestamps_opts []
-      @foreign_key_type :uuid
-      @attributes_context nil
-      @field_source_mapper fn x -> x end
 
       Module.register_attribute(__MODULE__, :active_memory_primary_keys, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_fields, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_query_fields, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_field_sources, accumulate: true)
-      Module.register_attribute(__MODULE__, :active_memory_autogenerate, accumulate: true)
       Module.put_attribute(__MODULE__, :active_memory_autogenerate_uuid, nil)
 
       opts = unquote(Macro.expand(opts, __CALLER__))
@@ -149,100 +144,6 @@ defmodule ActiveMemory.Table do
     define_attributes(opts, block)
   end
 
-  defp define_attributes(opts, block) do
-    prelude =
-      quote do
-        @after_compile ActiveMemory.Table
-
-        Module.register_attribute(__MODULE__, :active_memory_struct_fields, accumulate: true)
-
-        if @primary_key == nil do
-          @primary_key {:uuid, autogenerate: true}
-        end
-
-        primary_key_fields =
-          case @primary_key do
-            false ->
-              []
-
-            {name, opts} ->
-              ActiveMemory.Table.__field__(
-                __MODULE__,
-                name,
-                [primary_key: true] ++ opts
-              )
-
-              [name]
-
-            other ->
-              raise ArgumentError, "@primary_key must be false or {name, type, opts}"
-          end
-
-        try do
-          import ActiveMemory.Table
-          unquote(block)
-        after
-          :ok
-        end
-      end
-
-    postlude =
-      quote unquote: false do
-        primary_key_fields = @active_memory_primary_keys |> Enum.reverse()
-        autogenerate = @active_memory_autogenerate |> Enum.reverse()
-        fields = @active_memory_fields |> Enum.reverse()
-        active_memory_query_fields = @active_memory_query_fields |> Enum.reverse()
-        field_sources = @active_memory_field_sources |> Enum.reverse()
-        query_fields = Enum.map(active_memory_query_fields, & &1)
-        query_map = Helpers.build_query_map(query_fields)
-
-        loaded = ActiveMemory.Table.__loaded__(__MODULE__, @active_memory_struct_fields)
-
-        defstruct Enum.reverse(@active_memory_struct_fields)
-
-        def __attributes__(:fields), do: unquote(Enum.map(fields, & &1))
-
-        def __attributes__(:query_fields), do: unquote(query_fields)
-
-        def __attributes__(:primary_key), do: unquote(primary_key_fields)
-
-        def __attributes__(:query_map), do: unquote(query_map)
-
-        def __attributes__(:autogenerate_uuid),
-          do: unquote(Macro.escape(@active_memory_autogenerate_uuid))
-
-        def __attributes__(:adapter), do: unquote(Macro.escape(@adapter))
-
-        def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
-
-        def __attributes__(:autogenerate), do: unquote(Macro.escape(autogenerate))
-
-        def __attributes__(:loaded), do: unquote(Macro.escape(loaded))
-
-        def __attributes__(:match_head),
-          do:
-            Helpers.build_match_head(
-              unquote(query_map),
-              unquote(__MODULE__),
-              unquote(Macro.escape(@adapter))
-            )
-
-        for clauses <-
-              ActiveMemory.Table.__attributes__(
-                fields,
-                field_sources
-              ),
-            {args, body} <- clauses do
-          def __attributes__(unquote_splicing(args)), do: unquote(body)
-        end
-      end
-
-    quote do
-      unquote(prelude)
-      unquote(postlude)
-    end
-  end
-
   defmacro field(name, opts \\ []) do
     quote do
       ActiveMemory.Table.__field__(
@@ -251,16 +152,6 @@ defmodule ActiveMemory.Table do
         unquote(opts)
       )
     end
-  end
-
-  @doc false
-  def __field__(mod, name, opts) do
-    define_field(mod, name, opts)
-  end
-
-  @doc false
-  def __loaded__(module, struct_fields) do
-    Map.new([{:__struct__, module} | struct_fields])
   end
 
   @doc false
@@ -305,6 +196,11 @@ defmodule ActiveMemory.Table do
     ]
   end
 
+  @doc false
+  def __field__(mod, name, opts) do
+    define_field(mod, name, opts)
+  end
+
   defp define_field(mod, name, opts) do
     pk? = Keyword.get(opts, :primary_key) || false
     put_struct_field(mod, name, Keyword.get(opts, :default))
@@ -318,6 +214,91 @@ defmodule ActiveMemory.Table do
     end
 
     Module.put_attribute(mod, :active_memory_fields, name)
+  end
+
+  defp define_attributes(opts, block) do
+    prelude =
+      quote do
+        @after_compile ActiveMemory.Table
+
+        Module.register_attribute(__MODULE__, :active_memory_struct_fields, accumulate: true)
+
+        if @primary_key == nil do
+          @primary_key {:uuid, autogenerate: true}
+        end
+
+        primary_key_fields =
+          case @primary_key do
+            false ->
+              []
+
+            {name, opts} ->
+              ActiveMemory.Table.__field__(
+                __MODULE__,
+                name,
+                [primary_key: true] ++ opts
+              )
+
+              [name]
+
+            other ->
+              raise ArgumentError, "@primary_key must be false or {name, type, opts}"
+          end
+
+        try do
+          import ActiveMemory.Table
+          unquote(block)
+        after
+          :ok
+        end
+      end
+
+    postlude =
+      quote unquote: false do
+        primary_key_fields = @active_memory_primary_keys |> Enum.reverse()
+        fields = @active_memory_fields |> Enum.reverse()
+        active_memory_query_fields = @active_memory_query_fields |> Enum.reverse()
+        field_sources = @active_memory_field_sources |> Enum.reverse()
+        query_fields = Enum.map(active_memory_query_fields, & &1)
+        query_map = Helpers.build_query_map(query_fields)
+
+        defstruct Enum.reverse(@active_memory_struct_fields)
+
+        def __attributes__(:query_fields), do: unquote(query_fields)
+
+        def __attributes__(:primary_key), do: unquote(primary_key_fields)
+
+        def __attributes__(:query_map), do: unquote(query_map)
+
+        def __attributes__(:autogenerate_uuid),
+          do: unquote(Macro.escape(@active_memory_autogenerate_uuid))
+
+        def __attributes__(:adapter), do: unquote(Macro.escape(@adapter))
+
+        def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
+
+        def __attributes__(:match_head),
+          do:
+            Helpers.build_match_head(
+              unquote(query_map),
+              unquote(__MODULE__),
+              unquote(Macro.escape(@adapter))
+            )
+
+        for clauses <-
+              ActiveMemory.Table.__attributes__(
+                fields,
+                field_sources
+              ),
+            {args, body} <- clauses do
+          def __attributes__(unquote_splicing(args)), do: unquote(body)
+        end
+      end
+
+    quote do
+      unquote(prelude)
+      unquote(postlude)
+    end
   end
 
   defp put_struct_field(mod, name, assoc) do

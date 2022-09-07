@@ -1,13 +1,10 @@
 defmodule ActiveMemory.Adapters.Mnesia.Migration do
-  @default_access_mode :read_write
-  @default_table_copy_type :ram_copies
-
   def migrate_table_options(table) do
     table.__attributes__(:table_options)
     |> migrate_access_mode(table)
+    |> migrate_ram_copies(table)
     |> migrate_disc_copies(table)
     |> migrate_disc_only_copies(table)
-    |> migrate_ram_copies(table)
     |> migrate_indexes(table)
     |> migrate_load_order(table)
     |> migrate_majority(table)
@@ -34,17 +31,19 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   end
 
   defp migrate_ram_copies(options, table) do
-    ram_copies = Keyword.get(options, :ram_copies, [node()])
-    :mnesia.change_table_copy_type(table, ram_copies, :ram_copies)
+    ram_copy_node = Keyword.get(options, :ram_copies, node())
+    :mnesia.change_table_copy_type(table, ram_copy_node, :ram_copies)
     options
   end
 
   defp migrate_indexes(options, table) do
     new_indexes = Keyword.get(options, :index, [])
-    named_indexes = get_indexes(:mnesia.table_info(table, :index), table.__meta__.attributes)
+    indexes = :mnesia.table_info(table, :index)
 
-    add_indexes(named_indexes -- new_indexes, table)
-    delete_indexes(new_indexes -- named_indexes, table)
+    current_indexes = get_indexes(indexes, :mnesia.table_info(table, :attributes))
+
+    add_indexes(new_indexes -- current_indexes, table)
+    delete_indexes(current_indexes -- new_indexes, table)
     options
   end
 
@@ -64,8 +63,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
 
   defp get_indexes(indexes, attributes) do
     indexes
-    |> Enum.into([], fn index -> Enum.at(attributes, index - 1) end)
-    |> Enum.sort()
+    |> Enum.map(fn index -> Enum.at(attributes, index - 2) end)
   end
 
   defp add_indexes([], _table), do: nil

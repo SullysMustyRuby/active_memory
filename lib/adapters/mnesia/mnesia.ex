@@ -2,7 +2,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   @moduledoc false
 
   alias ActiveMemory.Adapter
-  alias ActiveMemory.Adapters.Mnesia.Helpers
+  alias ActiveMemory.Adapters.Mnesia.{Helpers, Migration}
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
 
   @behaviour Adapter
@@ -98,6 +98,8 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   defp copy_table(table) do
+    :ok = Migration.migrate_table_options(table)
+
     case :mnesia.add_table_copy(table, Node.self(), :ram_copies) do
       {:atomic, :ok} ->
         :mnesia.wait_for_tables([table], 5000)

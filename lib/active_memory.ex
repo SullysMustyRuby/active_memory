@@ -18,12 +18,12 @@ defmodule ActiveMemory do
       options: [index: [:last, :cylon?]]
 
     attributes do
-      field(:email)
-      field(:first)
-      field(:last)
-      field(:hair_color)
-      field(:age)
-      field(:cylon?)
+      field :email
+      field :first
+      field :last
+      field :hair_color
+      field :age
+      field :cylon?
     end
   end
   ```
