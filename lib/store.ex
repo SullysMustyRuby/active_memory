@@ -131,20 +131,29 @@ defmodule ActiveMemory.Store do
       end
 
       @spec write(map()) :: {:ok, map()} | {:error, any()}
-      def write(%@table{uuid: uuid} = struct) when is_binary(uuid) do
-        :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
-      end
-
-      def write(%@table{uuid: nil} = struct) do
-        with_uuid = Map.put(struct, :uuid, UUID.uuid4())
-        :erlang.apply(@table.__attributes__(:adapter), :write, [with_uuid, @table])
-      end
-
       def write(%@table{} = struct) do
-        :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
+        case Map.has_key?(struct, :uuid) do
+          true -> write_with_uuid(struct)
+          false -> normal_write(struct)
+        end
       end
 
       def write(_), do: {:error, :bad_schema}
+
+      defp write_with_uuid(%@table{} = struct) do
+        case Map.get(struct, :uuid) do
+          nil ->
+            with_uuid = Map.put(struct, :uuid, UUID.uuid4())
+            :erlang.apply(@table.__attributes__(:adapter), :write, [with_uuid, @table])
+
+          uuid when is_binary(uuid) ->
+            :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
+        end
+      end
+
+      def normal_write(%@table{} = struct) do
+        :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
+      end
 
       @impl true
       def handle_call(:reload_seeds, _from, state) do

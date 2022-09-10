@@ -339,7 +339,6 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert new_record.weight == "30"
       assert new_record.fixed? == false
       assert new_record.name == "gem"
-      assert new_record.uuid != nil
     end
 
     test "returns error for a record with no schema" do

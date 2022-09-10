@@ -2,7 +2,7 @@ defmodule Test.Support.People.Person do
   use ActiveMemory.Table,
     options: [index: [:last, :cylon?]]
 
-  attributes do
+  attributes auto_generate_uuid: true do
     field(:email)
     field(:first)
     field(:last)

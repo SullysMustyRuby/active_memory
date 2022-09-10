@@ -1,16 +1,35 @@
 defmodule ActiveMemory.Table do
   @moduledoc """
 
-  Define your table attributes and defaults just like a regular Elixir module struct.
-  Keys can have default values defined.
+  Define your table attributes and options. 
 
-  Example Table:
+  Example Table (without auto generated uuid):
   ```elixir
   defmodule Test.Support.People.Person do
     use ActiveMemory.Table,
       options: [index: [:last, :cylon?]]
 
     attributes do
+      field :email
+      field :first
+      field :last
+      field :hair_color
+      field :age
+      field :cylon?
+    end
+  end
+  ```
+  ### Auto Generated UUID
+  A table can have an auto generated UUID. Specify the option `auto_generate_uuid: true` in the
+  attributes as an option.
+
+  Example Table with auto generated uuid:
+  ```elixir
+  defmodule Test.Support.People.Person do
+    use ActiveMemory.Table,
+      options: [index: [:last, :cylon?]]
+
+    attributes auto_generate_uuid: true do
       field :email
       field :first
       field :last
@@ -116,13 +135,9 @@ defmodule ActiveMemory.Table do
     quote do
       import ActiveMemory.Table, only: [attributes: 1, attributes: 2]
 
-      @primary_key nil
-
-      Module.register_attribute(__MODULE__, :active_memory_primary_keys, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_fields, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_query_fields, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_field_sources, accumulate: true)
-      Module.put_attribute(__MODULE__, :active_memory_autogenerate_uuid, nil)
 
       opts = unquote(Macro.expand(opts, __CALLER__))
 
@@ -140,7 +155,7 @@ defmodule ActiveMemory.Table do
     end
   end
 
-  defmacro attributes(opts \\ nil, do: block) do
+  defmacro attributes(opts \\ [], do: block) do
     define_attributes(opts, block)
   end
 
@@ -202,48 +217,34 @@ defmodule ActiveMemory.Table do
   end
 
   defp define_field(mod, name, opts) do
-    pk? = Keyword.get(opts, :primary_key) || false
     put_struct_field(mod, name, Keyword.get(opts, :default))
 
-    if pk? do
-      Module.put_attribute(mod, :active_memory_primary_keys, name)
-    end
-
-    if Keyword.get(opts, :load_in_query, true) do
-      Module.put_attribute(mod, :active_memory_query_fields, name)
-    end
+    Module.put_attribute(mod, :active_memory_query_fields, name)
 
     Module.put_attribute(mod, :active_memory_fields, name)
   end
 
-  defp define_attributes(opts, block) do
+  defp define_attributes(options, block) do
     prelude =
       quote do
+        opts = unquote(options)
+
         @after_compile ActiveMemory.Table
+
+        auto_generate_uuid = Keyword.get(opts, :auto_generate_uuid, false)
+
+        Module.put_attribute(__MODULE__, :auto_generate_uuid, auto_generate_uuid)
 
         Module.register_attribute(__MODULE__, :active_memory_struct_fields, accumulate: true)
 
-        if @primary_key == nil do
-          @primary_key {:uuid, autogenerate: true}
+        if auto_generate_uuid do
+          ActiveMemory.Table.__field__(
+            __MODULE__,
+            :uuid,
+            primary_key: true,
+            autogenerate: true
+          )
         end
-
-        primary_key_fields =
-          case @primary_key do
-            false ->
-              []
-
-            {name, opts} ->
-              ActiveMemory.Table.__field__(
-                __MODULE__,
-                name,
-                [primary_key: true] ++ opts
-              )
-
-              [name]
-
-            other ->
-              raise ArgumentError, "@primary_key must be false or {name, type, opts}"
-          end
 
         try do
           import ActiveMemory.Table
@@ -255,7 +256,6 @@ defmodule ActiveMemory.Table do
 
     postlude =
       quote unquote: false do
-        primary_key_fields = @active_memory_primary_keys |> Enum.reverse()
         fields = @active_memory_fields |> Enum.reverse()
         active_memory_query_fields = @active_memory_query_fields |> Enum.reverse()
         field_sources = @active_memory_field_sources |> Enum.reverse()
@@ -264,18 +264,9 @@ defmodule ActiveMemory.Table do
 
         defstruct Enum.reverse(@active_memory_struct_fields)
 
-        def __attributes__(:query_fields), do: unquote(query_fields)
-
-        def __attributes__(:primary_key), do: unquote(primary_key_fields)
-
-        def __attributes__(:query_map), do: unquote(query_map)
-
-        def __attributes__(:autogenerate_uuid),
-          do: unquote(Macro.escape(@active_memory_autogenerate_uuid))
-
         def __attributes__(:adapter), do: unquote(Macro.escape(@adapter))
 
-        def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
+        def __attributes__(:auto_generate_uuid), do: unquote(Macro.escape(@auto_generate_uuid))
 
         def __attributes__(:match_head),
           do:
@@ -284,6 +275,12 @@ defmodule ActiveMemory.Table do
               unquote(__MODULE__),
               unquote(Macro.escape(@adapter))
             )
+
+        def __attributes__(:query_fields), do: unquote(query_fields)
+
+        def __attributes__(:query_map), do: unquote(query_map)
+
+        def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
 
         for clauses <-
               ActiveMemory.Table.__attributes__(
@@ -306,7 +303,7 @@ defmodule ActiveMemory.Table do
 
     if List.keyfind(fields, name, 0) do
       raise ArgumentError,
-            "field/association #{inspect(name)} already exists on schema, you must either remove the duplication or choose a different name"
+            "field/association #{inspect(name)} already exists on attributes, you must either remove the duplication or choose a different name"
     end
 
     Module.put_attribute(mod, :active_memory_struct_fields, {name, assoc})

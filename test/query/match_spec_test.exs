@@ -15,10 +15,10 @@ defmodule ActiveMemory.Query.MatchSpecTest do
 
       [{match_head, query, result}] = MatchSpec.build(query, query_map, match_head)
 
-      assert match_head == {:"$1", :"$2", :"$3", :"$4", :"$5", :"$6", :"$7"}
+      assert match_head == {:"$1", :"$2", :"$3", :"$4", :"$5", :"$6"}
 
       assert query == [
-               {:and, {:and, {:==, :"$3", "PitBull"}, {:>, :"$4", 40}}, {:==, :"$6", false}}
+               {:and, {:and, {:==, :"$2", "PitBull"}, {:>, :"$3", 40}}, {:==, :"$5", false}}
              ]
 
       assert result == [:"$_"]
@@ -36,7 +36,7 @@ defmodule ActiveMemory.Query.MatchSpecTest do
       [{_match_head, query, _result}] = MatchSpec.build(query, query_map, match_head)
 
       assert query == [
-               {:and, {:and, {:==, :"$3", "PitBull"}, {:>, :"$4", 40}}, {:==, :"$6", false}}
+               {:and, {:and, {:==, :"$2", "PitBull"}, {:>, :"$3", 40}}, {:==, :"$5", false}}
              ]
     end
   end
