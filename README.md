@@ -33,6 +33,17 @@ defmodule MyApp.People.Person do
     field(:cylon?)
   end
 end
+
+There is also optional auto-generation of uuid
+
+  attributes auto_generate_uuid: true do
+    field(:email)
+    field(:first)
+    field(:last)
+    field(:hair_color)
+    field(:age)
+    field(:cylon?)
+  end
 ```
 Example Mnesia Store (default):
 ```elixir
