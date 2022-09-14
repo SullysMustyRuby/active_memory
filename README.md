@@ -133,10 +133,12 @@ by adding `active_memory` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:active_memory, "~> 0.1.0"}
+    {:active_memory, "~> 0.2.1"}
   ]
 end
 ```
+
+Check out the ([documentation](https://hex.pm/packages/active_memory))
 
 ## Potential Use Cases
 There are many reasons to be leveraging the power of in memory store and the awesome tools of [Mnesia](https://www.erlang.org/doc/man/mnesia.html) and [ETS](https://www.erlang.org/doc/man/ets.html) in your Elixir applications.
