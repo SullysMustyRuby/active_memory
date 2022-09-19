@@ -25,10 +25,10 @@ defmodule ActiveMemory.Adapters.Mnesia do
         :mnesia.wait_for_tables([table], 5000)
 
       {:aborted, {:already_exists, _table}} ->
-        copy_table(table)
+        Migration.migrate_table_options(table)
 
       {:aborted, {:already_exists, _table, _node}} ->
-        copy_table(table)
+        Migration.migrate_table_options(table)
 
       {:error, message} ->
         {:error, message}
@@ -94,21 +94,6 @@ defmodule ActiveMemory.Adapters.Mnesia do
     case write_object(to_tuple(struct), table) do
       {:atomic, :ok} -> {:ok, struct}
       {:error, message} -> {:error, message}
-    end
-  end
-
-  defp copy_table(table) do
-    :ok = Migration.migrate_table_options(table)
-
-    case :mnesia.add_table_copy(table, Node.self(), :ram_copies) do
-      {:atomic, :ok} ->
-        :mnesia.wait_for_tables([table], 5000)
-
-      {:aborted, {:already_exists, _table, _node}} ->
-        :ok
-
-      {:error, message} ->
-        {:error, message}
     end
   end
 

@@ -27,6 +27,9 @@ defmodule ActiveMemory.MixProject do
         main: @name,
         canonical: "https://hexdocs.pm/#{@app}",
         extras: ["README.md"]
+      ],
+      aliases: [
+        test: "test --no-start"
       ]
     ]
   end
@@ -46,7 +49,8 @@ defmodule ActiveMemory.MixProject do
   defp deps do
     [
       {:uuid, "~> 1.1"},
-      {:ex_doc, "~> 0.27", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.27", only: :dev, runtime: false},
+      {:local_cluster, "~> 1.2", only: [:test]}
     ]
   end
 
