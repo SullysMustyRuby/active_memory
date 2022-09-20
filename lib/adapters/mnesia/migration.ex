@@ -79,17 +79,12 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     options_disc_nodes = Keyword.get(options, :disc_copies, []) |> Enum.sort()
     options_disc_only_nodes = Keyword.get(options, :disc_only_copies, []) |> Enum.sort()
 
-    current_ram_nodes = :mnesia.table_info(table, :ram_copies) |> Enum.sort()
-    current_disc_nodes = :mnesia.table_info(table, :disc_copies) |> Enum.sort()
-    current_disc_only_nodes = :mnesia.table_info(table, :disc_only_copies) |> Enum.sort()
-
     with :ok <-
            copy_type_validation(options_ram_nodes, options_disc_nodes, options_disc_only_nodes),
-         :ok <- add_copy_types(current_ram_nodes, options_ram_nodes, table, :ram_copies),
-         :ok <- add_copy_types(current_disc_nodes, options_disc_nodes, table, :disc_copies),
+         :ok <- add_copy_types(options_ram_nodes, table, :ram_copies),
+         :ok <- add_copy_types(options_disc_nodes, table, :disc_copies),
          :ok <-
            add_copy_types(
-             current_disc_only_nodes,
              options_disc_only_nodes,
              table,
              :disc_only_copies
@@ -99,22 +94,9 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   end
 
   defp migrate_table_copies_to_delete(options, table) do
-    options_ram_nodes = Keyword.get(options, :ram_copies, [node()]) |> Enum.sort()
-    options_disc_nodes = Keyword.get(options, :disc_copies, []) |> Enum.sort()
-    options_disc_only_nodes = Keyword.get(options, :disc_only_copies, []) |> Enum.sort()
-
-    current_ram_nodes = :mnesia.table_info(table, :ram_copies) |> Enum.sort()
-    current_disc_nodes = :mnesia.table_info(table, :disc_copies) |> Enum.sort()
-    current_disc_only_nodes = :mnesia.table_info(table, :disc_only_copies) |> Enum.sort()
-
-    with :ok <- remove_copy_types(current_ram_nodes, options_ram_nodes, table),
-         :ok <- remove_copy_types(current_disc_nodes, options_disc_nodes, table),
-         :ok <-
-           remove_copy_types(
-             current_disc_only_nodes,
-             options_disc_only_nodes,
-             table
-           ) do
+    with :ok <- remove_copy_types(options, table, :ram_copies, [node()]),
+         :ok <- remove_copy_types(options, table, :disc_copies, []),
+         :ok <- remove_copy_types(options, table, :disc_only_copies, []) do
       options
     end
   end
@@ -165,14 +147,23 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   defp parse_check(true, copy_type),
     do: {:error, "#{copy_type} options are invalid. Please read the documentation"}
 
-  defp add_copy_types(current_nodes, options_nodes, table, copy_type) do
-    current_nodes
+  defp add_copy_types(options_nodes, table, copy_type) do
+    table
+    |> :mnesia.table_info(copy_type)
+    |> Enum.sort()
     |> compare_nodes_to_add(options_nodes)
     |> add_copy_type(table, copy_type)
   end
 
-  defp remove_copy_types(current_nodes, options_nodes, table) do
-    current_nodes
+  defp remove_copy_types(options, table, copy_type, default_nodes \\ []) do
+    options_nodes =
+      options
+      |> Keyword.get(copy_type, default_nodes)
+      |> Enum.sort()
+
+    table
+    |> :mnesia.table_info(copy_type)
+    |> Enum.sort()
     |> compare_nodes_to_remove(options_nodes)
     |> delete_copy_type(table)
   end
