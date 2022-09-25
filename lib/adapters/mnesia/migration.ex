@@ -1,6 +1,5 @@
 defmodule ActiveMemory.Adapters.Mnesia.Migration do
   @moduledoc """
-  Migrations to :mnesia schema
   Migrations will get run on app startup and are designed to modify :mnesia's schema.
 
   ## Table Copies
@@ -14,18 +13,18 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     use ActiveMemory.Table,
       options: [compressed: true, read_concurrency: true]
     .
-    .
+    # module code
     .
   end
   ```
-  The default will be `[node()]` thus this table will reside on the `node()` ram. 
+  The default will be `[node()]` and this table will reside on the `node()` ram. 
   Example table spcifing nodes and ram copies:
   ```elixir
   defmodule Test.Support.Dogs.Dog do
     use ActiveMemory.Table,
       options: [compressed: true, read_concurrency: true, ram_copes: [node() | Node.list()]
     .
-    .
+    # module code
     .
   end
   ```
@@ -41,7 +40,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     use ActiveMemory.Table,
       options: [compressed: true, read_concurrency: true, disc_copes: [node()]
     .
-    .
+    # module code
     .
   end
   ```
@@ -57,7 +56,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     use ActiveMemory.Table,
       options: [compressed: true, read_concurrency: true, disc_only_copes: [node()]
     .
-    .
+    # module code
     .
   end
   ```
