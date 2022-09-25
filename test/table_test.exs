@@ -23,7 +23,11 @@ defmodule ActiveMemory.TableTest do
              ]
 
       assert Whale.__attributes__(:adapter) == ActiveMemory.Adapters.Mnesia
-      assert Whale.__attributes__(:table_options) == [index: [:first, :last, :email]]
+
+      assert Whale.__attributes__(:table_options) == [
+               {:index, [:first, :last]},
+               {:ram_copies, [:"app_instance1@127.0.0.1"]}
+             ]
 
       assert Whale.__attributes__(:match_head) ==
                {Test.Support.Whales.Whale, :"$1", :"$2", :"$3", :"$4", :"$5"}

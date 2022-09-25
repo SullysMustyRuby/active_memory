@@ -1,7 +1,7 @@
 defmodule ActiveMemory.Adapters.Ets do
   @moduledoc false
 
-  alias ActiveMemory.Adapter
+  alias ActiveMemory.Adapters.Adapter
   alias ActiveMemory.Adapters.Ets.Helpers
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
 

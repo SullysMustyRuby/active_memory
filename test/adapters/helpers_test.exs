@@ -1,7 +1,7 @@
-defmodule ActiveMemory.Adapter.HelpersTest do
+defmodule ActiveMemory.Adapters.HelpersTest do
   use ExUnit.Case
 
-  alias ActiveMemory.Adapter.Helpers
+  alias ActiveMemory.Adapters.Helpers
 
   describe "build_query_map/1" do
     test "returns a list of tuples indexed for simple key attributes" do

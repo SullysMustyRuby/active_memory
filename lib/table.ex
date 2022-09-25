@@ -129,7 +129,7 @@ defmodule ActiveMemory.Table do
   if you need to change the decentralized_counters use the following syntax: `[decentralized_counters: true]`
 
   """
-  alias ActiveMemory.Adapter.Helpers
+  alias ActiveMemory.Adapters.Helpers
 
   defmacro __using__(opts) do
     quote do

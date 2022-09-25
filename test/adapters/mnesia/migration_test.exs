@@ -1,12 +1,38 @@
 defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
   use ExUnit.Case, async: false
 
-  # By default these tests are skipped becasue they cause errors. To run
-  # mix test test/adapters/mnesia/migration_test.exs --include migration
+  @moduledoc """
+  By default these tests are skipped becasue they cause errors. 
+  To run these tests make sure the empd daemon is running.
+  In your terminal:
+  ```bash
+  $ epmd -daemon
+  ```
+  In test_helper.exs uncomment the following line:
+  ```elixir
+  # :ok = LocalCluster.start()
+  ```
+  Don`t forget to commnt out the line above when completed.
+  then run:
+  ```elixir
+    mix test test/adapters/mnesia/migration_test.exs --include migration
+  ```
+
+  """
 
   alias Test.Support.People.{Person, Store}
+  alias Test.Support.Whales.Store, as: WhaleStore
+  alias Test.Support.Whales.Whale
 
   describe "migrate_table_options/1" do
+    setup do
+      File.cwd!() |> Path.join("Mnesia.manager@127.0.0.1") |> File.rm_rf()
+
+      on_exit(fn -> File.cwd!() |> Path.join("Mnesia.manager@127.0.0.1") |> File.rm_rf() end)
+
+      {:ok, %{}}
+    end
+
     @tag :migration
     test "updates the access_mode on startup" do
       assert :mnesia.create_table(Person,
@@ -19,63 +45,87 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
 
       assert :mnesia.table_info(Person, :access_mode) == :read_only
 
-      {:ok, pid} = Store.start_link()
+      {:ok, _pid} = Store.start_link()
 
       assert :mnesia.table_info(Person, :access_mode) == :read_write
-
-      Process.exit(pid, :kill)
     end
 
     @tag :migration
     test "updates the disc copies on startup" do
-      File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
-      :stopped = :mnesia.stop()
+      [app_instance] = LocalCluster.start_nodes("app_instance", 1)
+
+      {[:stopped, :stopped], []} = :rpc.multicall(:mnesia, :stop, [])
+      :ok = :mnesia.delete_schema([Node.self() | Node.list()])
       :ok = :mnesia.create_schema([node()])
-      :ok = :mnesia.start()
+      {[:ok, :ok], []} = :rpc.multicall(:mnesia, :start, [])
 
       assert :mnesia.create_table(Person,
                attributes: [:uuid, :email, :first, :last, :hair_color, :age, :cylon?],
                index: [:last, :cylon?],
                disc_copies: [node()],
+               ram_copies: [app_instance],
                type: :set
              ) == {:atomic, :ok}
 
-      assert :mnesia.table_info(Person, :disc_copies) == [:nonode@nohost]
+      assert :mnesia.table_info(Person, :disc_copies) == [node()]
 
-      {:ok, pid} = Store.start_link()
+      {:ok, _pid} = Store.start_link()
 
       assert :mnesia.table_info(Person, :disc_copies) == []
-      assert :mnesia.table_info(Person, :ram_copies) == [:nonode@nohost]
+      assert :mnesia.table_info(Person, :ram_copies) == [node()]
 
-      {:ok, _} = File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
-
-      Process.exit(pid, :kill)
+      :ok = LocalCluster.stop_nodes([app_instance])
     end
 
     @tag :migration
     test "updates the disc_only_copies on startup" do
-      File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
-      :stopped = :mnesia.stop()
+      [app_instance] = LocalCluster.start_nodes("app_instance", 1)
+
+      {[:stopped, :stopped], []} = :rpc.multicall(:mnesia, :stop, [])
+      :ok = :mnesia.delete_schema([Node.self() | Node.list()])
       :ok = :mnesia.create_schema([node()])
-      :ok = :mnesia.start()
+      {[:ok, :ok], []} = :rpc.multicall(:mnesia, :start, [])
 
       assert :mnesia.create_table(Person,
                attributes: [:uuid, :email, :first, :last, :hair_color, :age, :cylon?],
                index: [:last, :cylon?],
                disc_only_copies: [node()],
+               ram_copies: [app_instance],
                type: :set
              ) == {:atomic, :ok}
 
-      assert :mnesia.table_info(Person, :disc_only_copies) == [:nonode@nohost]
+      assert :mnesia.table_info(Person, :disc_only_copies) == [:"manager@127.0.0.1"]
 
-      {:ok, pid} = Store.start_link()
+      {:ok, _pid} = Store.start_link()
 
       assert :mnesia.table_info(Person, :disc_only_copies) == []
-      assert :mnesia.table_info(Person, :ram_copies) == [:nonode@nohost]
+      assert :mnesia.table_info(Person, :ram_copies) == [:"manager@127.0.0.1"]
 
-      {:ok, _} = File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
+      :ok = LocalCluster.stop_nodes([app_instance])
+    end
 
-      Process.exit(pid, :kill)
+    @tag :migration
+    test "removes the local ram_copy on startup" do
+      [app_instance] = LocalCluster.start_nodes("app_instance", 1)
+
+      :stopped = :mnesia.stop()
+      :ok = :mnesia.create_schema([node()])
+      :ok = :mnesia.start()
+
+      assert :mnesia.create_table(Whale,
+               attributes: [:email, :first, :last, :hair_color, :age],
+               index: [:first, :last],
+               ram_copies: [node()],
+               type: :set
+             ) == {:atomic, :ok}
+
+      assert :mnesia.table_info(Whale, :ram_copies) == [:"manager@127.0.0.1"]
+
+      {:ok, _pid} = WhaleStore.start_link()
+
+      assert :mnesia.table_info(Whale, :ram_copies) == [app_instance]
+
+      :ok = LocalCluster.stop_nodes([app_instance])
     end
 
     @tag :migration
@@ -142,7 +192,6 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
 
     @tag :migration
     test "updates the migrate load order on startup" do
-      File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
       :stopped = :mnesia.stop()
       :ok = :mnesia.create_schema([node()])
       :ok = :mnesia.start()
@@ -160,14 +209,11 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
 
       assert :mnesia.table_info(Person, :load_order) == 0
 
-      {:ok, _} = File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
-
       Process.exit(pid, :kill)
     end
 
     @tag :migration
     test "updates the majority on startup" do
-      File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
       :stopped = :mnesia.stop()
       :ok = :mnesia.create_schema([node()])
       :ok = :mnesia.start()
@@ -188,8 +234,6 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
       updated = :mnesia.table_info(Person, :all)
 
       refute Keyword.get(updated, :majority)
-
-      {:ok, _} = File.cwd!() |> Path.join("Mnesia.nonode@nohost") |> File.rm_rf()
 
       Process.exit(pid, :kill)
     end

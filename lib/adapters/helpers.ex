@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Adapter.Helpers do
+defmodule ActiveMemory.Adapters.Helpers do
   @moduledoc false
 
   alias ActiveMemory.Adapters.{Ets, Mnesia}

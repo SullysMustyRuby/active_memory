@@ -1,6 +1,6 @@
 defmodule Test.Support.Whales.Whale do
   use ActiveMemory.Table,
-    options: [index: [:first, :last, :email]]
+    options: [index: [:first, :last], ram_copies: [:"app_instance1@127.0.0.1"]]
 
   attributes do
     field(:email)
