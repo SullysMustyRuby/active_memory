@@ -1,4 +1,4 @@
-defmodule ActiveMemory.Adapter do
+defmodule ActiveMemory.Adapters.Adapter do
   @moduledoc false
 
   @callback all(atom()) :: list(map())

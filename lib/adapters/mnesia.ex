@@ -1,7 +1,7 @@
 defmodule ActiveMemory.Adapters.Mnesia do
   @moduledoc false
 
-  alias ActiveMemory.Adapter
+  alias ActiveMemory.Adapters.Adapter
   alias ActiveMemory.Adapters.Mnesia.{Helpers, Migration}
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
 
