@@ -1,8 +1,24 @@
 defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
   use ExUnit.Case, async: false
 
-  # By default these tests are skipped becasue they cause errors. To run
-  # mix test test/adapters/mnesia/migration_test.exs --include migration
+  @moduledoc """
+  By default these tests are skipped becasue they cause errors. 
+  To run these tests make sure the empd daemon is running.
+  In your terminal:
+  ```bash
+  $ epmd -daemon
+  ```
+  In test_helper.exs uncomment the following line:
+  ```elixir
+  # :ok = LocalCluster.start()
+  ```
+  Don`t forget to commnt out the line above when completed.
+  then run:
+  ```elixir
+    mix test test/adapters/mnesia/migration_test.exs --include migration
+  ```
+
+  """
 
   alias Test.Support.People.{Person, Store}
   alias Test.Support.Whales.Store, as: WhaleStore

@@ -1,4 +1,91 @@
 defmodule ActiveMemory.Adapters.Mnesia.Migration do
+  @moduledoc """
+  Migrations to :mnesia schema
+  Migrations will get run on app startup and are designed to modify :mnesia's schema.
+
+  ## Table Copies
+  In the `options` of an ActiveMemory.Table, the copy type and nodes which should have them can be specified.
+
+  ### Ram copies 
+  Tables that only reside in ram on the nodes specified. The default is `node()`
+  Example table using default setting:
+  ```elixir
+  defmodule Test.Support.Dogs.Dog do
+    use ActiveMemory.Table,
+      options: [compressed: true, read_concurrency: true]
+    .
+    .
+    .
+  end
+  ```
+  The default will be `[node()]` thus this table will reside on the `node()` ram. 
+  Example table spcifing nodes and ram copies:
+  ```elixir
+  defmodule Test.Support.Dogs.Dog do
+    use ActiveMemory.Table,
+      options: [compressed: true, read_concurrency: true, ram_copes: [node() | Node.list()]
+    .
+    .
+    .
+  end
+  ```
+  All the active nodes in Node.list() and node() will have ram copes of the table.
+
+  ### Disc copies
+  Disc copy tables reside **both** in ram and disc on the nodes specified. 
+  In order to persist to disc the schema must be setup on at lest one running node.
+  The default is [] (no nodes).
+  Example table spcifing nodes and disc copies:
+  ```elixir
+  defmodule Test.Support.Dogs.Dog do
+    use ActiveMemory.Table,
+      options: [compressed: true, read_concurrency: true, disc_copes: [node()]
+    .
+    .
+    .
+  end
+  ```
+  The table will have a ram copy and disc copy on `node()` 
+
+  ### Disc only copies
+  Disc oly tables reside **only** on disc on the nodes specified. 
+  In order to persist to disc the schema must be setup on at lest one running node.
+  The default is [] (no nodes).
+  Example table spcifing nodes and disc copies:
+  ```elixir
+  defmodule Test.Support.Dogs.Dog do
+    use ActiveMemory.Table,
+      options: [compressed: true, read_concurrency: true, disc_only_copes: [node()]
+    .
+    .
+    .
+  end
+  ```
+  The table will only have a disc copy on `node()`
+
+  ## Table Read and Write Access
+  Mnesia tables can be set to `read_only` or `read_write`. The default is `read_write`.
+  Read only tables updates cannot be performed.
+  if you need to change the access use the following syntax: `[access_mode: :read_only]`
+
+  ## Table Types
+  Tables can be either a `:set`, `:ordered_set`, or a `:bag`. The default is `:set`
+  if you need to change the type use the following syntax: `[type: :bag]`
+
+  ## Indexes
+  If Indexes are desired specify an atom attribute list for which Mnesia is to build and maintain an extra index table. 
+  The qlc query compiler may be able to optimize queries if there are indexes available.
+  To specify Indexes use the following syntax: `[index: [:age, :hair_color, :cylon?]]`
+
+  ## Table Load Order
+  The load order priority is by default 0 (zero) but can be set to any integer. The tables with the highest load order priority are loaded first at startup.
+  If you need to change the load order use the following syntax: `[load_order: 2]`
+
+  ## Majority
+  If true, any (non-dirty) update to the table is aborted, unless a majority of the table replicas are available for the commit. When used on a fragmented table, all fragments are given the same the same majority setting.
+  If you need to modify the majority use the following syntax: `[majority: true]`
+  """
+
   def migrate_table_options(table) do
     table.__attributes__(:table_options)
     |> migrate_table_copies_to_add(table)
@@ -167,8 +254,6 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     options_ram_nodes = Keyword.get(options, :ram_copies, [node()]) |> Enum.sort()
     options_disc_nodes = Keyword.get(options, :disc_copies, []) |> Enum.sort()
     options_disc_only_nodes = Keyword.get(options, :disc_only_copies, []) |> Enum.sort()
-
-    val = copy_type_validation(options_ram_nodes, options_disc_nodes, options_disc_only_nodes)
 
     with :ok <-
            copy_type_validation(options_ram_nodes, options_disc_nodes, options_disc_only_nodes),
