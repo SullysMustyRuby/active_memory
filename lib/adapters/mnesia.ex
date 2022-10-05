@@ -24,6 +24,10 @@ defmodule ActiveMemory.Adapters.Mnesia do
       {:atomic, :ok} ->
         :mnesia.wait_for_tables([table], 5000)
 
+      {:aborted, {:not_active, _table, new_node}} ->
+        :mnesia.change_config(:extra_db_nodes, [new_node])
+        create_table(table, options)
+
       {:aborted, {:already_exists, _table}} ->
         Migration.migrate_table_options(table)
 
