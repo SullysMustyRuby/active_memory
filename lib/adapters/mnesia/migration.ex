@@ -250,8 +250,11 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   end
 
   defp migrate_table_copies_to_add(options, table) do
-    options_ram_nodes = Keyword.get(options, :ram_copies, [node()]) |> Enum.sort()
     options_disc_nodes = Keyword.get(options, :disc_copies, []) |> Enum.sort()
+
+    options_ram_nodes =
+      Keyword.get(options, :ram_copies, ram_copy_default(options_disc_nodes)) |> Enum.sort()
+
     options_disc_only_nodes = Keyword.get(options, :disc_only_copies, []) |> Enum.sort()
 
     with :ok <-
@@ -265,6 +268,13 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
              :disc_only_copies
            ) do
       options
+    end
+  end
+
+  defp ram_copy_default(options_disc_nodes) do
+    case Enum.member?(options_disc_nodes, node()) do
+      true -> []
+      false -> [node()]
     end
   end
 
