@@ -171,6 +171,10 @@ Create an `ActiveMemory.Store` to manage your admins easily and safely.
 
 **and many many many more...**
 
+## Demo Application
+The following Repo is a demo application using ActiveMemory and MnesiaManager concept.
+- [BeamDemo](https://github.com/SullysMustyRuby/BeamDemo)
+- [MnesiaManager](https://github.com/SullysMustyRuby/ActiveMemoryManager)
 
 ## Planned Enhancements
 - Allow pass through `:ets` and `mnesia` options for table creation
