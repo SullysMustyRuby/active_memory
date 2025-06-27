@@ -22,8 +22,7 @@ defmodule ActiveMemory.StoreTest do
 
       Process.flag(:trap_exit, true)
 
-      assert {:error, {:bad_return_value, {:error, :create_table_failed}}} ==
-               DogStore.start_link()
+      assert DogStore.start_link() == {:error, :create_table_failed}
 
       :ets.delete(Dog)
     end
