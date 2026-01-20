@@ -11,7 +11,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
     case match_object(:mnesia.table_info(table, :wild_pattern)) do
       {:atomic, []} -> []
       {:atomic, records} -> Enum.into(records, [], &to_struct(&1, table))
-      {:error, message} -> {:error, message}
+      {:aborted, message} -> {:error, message}
     end
   end
 
@@ -34,7 +34,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
       {:aborted, {:already_exists, _table, _node}} ->
         Migration.migrate_table_options(table)
 
-      {:error, message} ->
+      {:aborted, message} ->
         {:error, message}
     end
   end
@@ -42,7 +42,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   def delete(struct, table) do
     case delete_object(struct, table) do
       {:atomic, :ok} -> :ok
-      {:error, message} -> {:error, message}
+      {:aborted, message} -> {:error, message}
     end
   end
 
@@ -97,7 +97,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   def write(struct, table) do
     case write_object(to_tuple(struct), table) do
       {:atomic, :ok} -> {:ok, struct}
-      {:error, message} -> {:error, message}
+      {:aborted, message} -> {:error, message}
     end
   end
 

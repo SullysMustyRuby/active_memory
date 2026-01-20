@@ -5,7 +5,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   ## Table Copies
   In the `options` of an ActiveMemory.Table, the copy type and nodes which should have them can be specified.
 
-  ### Ram copies 
+  ### Ram copies
   Tables that only reside in ram on the nodes specified. The default is `node()`
   Example table using default setting:
   ```elixir
@@ -17,7 +17,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     .
   end
   ```
-  The default will be `[node()]` and this table will reside on the `node()` ram. 
+  The default will be `[node()]` and this table will reside on the `node()` ram.
   Example table spcifing nodes and ram copies:
   ```elixir
   defmodule Test.Support.Dogs.Dog do
@@ -31,7 +31,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   All the active nodes in Node.list() and node() will have ram copes of the table.
 
   ### Disc copies
-  Disc copy tables reside **both** in ram and disc on the nodes specified. 
+  Disc copy tables reside **both** in ram and disc on the nodes specified.
   In order to persist to disc the schema must be setup on at lest one running node.
   The default is [] (no nodes).
   Example table spcifing nodes and disc copies:
@@ -44,10 +44,10 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     .
   end
   ```
-  The table will have a ram copy and disc copy on `node()` 
+  The table will have a ram copy and disc copy on `node()`
 
   ### Disc only copies
-  Disc oly tables reside **only** on disc on the nodes specified. 
+  Disc oly tables reside **only** on disc on the nodes specified.
   In order to persist to disc the schema must be setup on at lest one running node.
   The default is [] (no nodes).
   Example table spcifing nodes and disc copies:
@@ -72,7 +72,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   if you need to change the type use the following syntax: `[type: :bag]`
 
   ## Indexes
-  If Indexes are desired specify an atom attribute list for which Mnesia is to build and maintain an extra index table. 
+  If Indexes are desired specify an atom attribute list for which Mnesia is to build and maintain an extra index table.
   The qlc query compiler may be able to optimize queries if there are indexes available.
   To specify Indexes use the following syntax: `[index: [:age, :hair_color, :cylon?]]`
 
@@ -286,7 +286,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     end
   end
 
-  defp parse_check(false, _copy_type), do: :ok
+  defp parse_check(false, copy_type), do: {:ok, copy_type}
 
   defp parse_check(true, copy_type),
     do: {:error, "#{copy_type} options are invalid. Please read the documentation"}

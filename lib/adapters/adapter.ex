@@ -7,7 +7,7 @@ defmodule ActiveMemory.Adapters.Adapter do
 
   @callback delete(map(), atom()) :: :ok | {:error, any()}
 
-  @callback delete_all(atom()) :: :ok | {:error, any()}
+  @callback delete_all(atom()) :: true | any()
 
   @callback one(map(), atom()) :: {:ok, map()} | {:error, any()}
 

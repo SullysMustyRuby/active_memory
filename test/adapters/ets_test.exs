@@ -72,6 +72,16 @@ defmodule ActiveMemory.Adapters.EtsTest do
     end
   end
 
+  describe "delete_all/1" do
+    test "with a valid table with items will delete all items" do
+      write_seeds()
+      dogs = DogStore.all()
+
+      assert length(dogs) == 10
+      assert DogStore.delete_all()
+    end
+  end
+
   describe "one/1 with a map query" do
     setup do
       write_seeds()

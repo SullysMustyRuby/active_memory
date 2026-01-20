@@ -48,9 +48,10 @@ defmodule ActiveMemory.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:uuid, "~> 1.1"},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
-      {:local_cluster, "~> 1.2", only: [:test]}
+      {:local_cluster, "~> 1.2", only: [:test]},
+      {:uuid, "~> 1.1"}
     ]
   end
 
