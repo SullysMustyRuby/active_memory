@@ -1,9 +1,9 @@
 defmodule ActiveMemory.Store do
   @moduledoc """
-  # The Store 
+  # The Store
 
   ## Store API
-    - `Store.all/0` Get all records stored  
+    - `Store.all/0` Get all records stored
     - `Store.delete/1` Delete the record provided
     - `Store.delete_all/0` Delete all records stored
     - `Store.one/1` Get one record matching either an attributes search or `match` query
@@ -188,7 +188,7 @@ defmodule ActiveMemory.Store do
       end
 
       defp initial_state({method, args}) do
-        :erlang.apply(__MODULE__, method, args)
+        {:ok, :erlang.apply(__MODULE__, method, args)}
       end
 
       defp run_seeds_file(nil), do: {:ok, :seed_success}
@@ -198,13 +198,12 @@ defmodule ActiveMemory.Store do
              true <- write_seeds(seeds) do
           {:ok, :seed_success}
         else
-          {:error, message} -> {:error, message}
           _ -> {:error, :seed_failure}
         end
       end
 
       defp write_seeds(seeds) do
-        seeds
+       seeds
         |> Task.async_stream(&write(&1))
         |> Enum.all?(fn {:ok, {result, _seed}} -> result == :ok end)
       end

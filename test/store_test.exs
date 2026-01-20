@@ -51,7 +51,7 @@ defmodule ActiveMemory.StoreTest do
     test "initial state with a method returns method state" do
       {:ok, pid} = DogStore.start_link()
 
-      state = DogStore.state()
+      {:ok, state} = DogStore.state()
       assert state.key == "value"
       assert state.next == "next_value"
       assert DateTime.diff(DateTime.utc_now(), state.now) < 10
