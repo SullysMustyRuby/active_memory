@@ -1,8 +1,7 @@
 defmodule Test.Support.Dogs.Store do
   use ActiveMemory.Store,
     table: Test.Support.Dogs.Dog,
-    before_init: [{:run_me, ["Blue"]}],
-    initial_state: {:initial_state, ["value", "next_value"]}
+    before_init: [{:run_me, ["Blue"]}]
 
   def run_me(name) do
     %Test.Support.Dogs.Dog{
@@ -12,8 +11,6 @@ defmodule Test.Support.Dogs.Store do
       fixed?: false
     }
     |> write()
-
-    :ok
   end
 
   def initial_state(arg, arg2) do

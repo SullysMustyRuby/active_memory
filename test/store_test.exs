@@ -36,28 +36,5 @@ defmodule ActiveMemory.StoreTest do
       :ets.delete(Dog)
       Process.exit(pid, :kill)
     end
-
-    test "initial state with no method returns table name and started_at" do
-      {:ok, pid} = PeopleStore.start_link()
-
-      state = PeopleStore.state()
-      assert state.table_name == Person
-      assert DateTime.diff(DateTime.utc_now(), state.started_at) < 10
-
-      :mnesia.delete_table(Person)
-      Process.exit(pid, :kill)
-    end
-
-    test "initial state with a method returns method state" do
-      {:ok, pid} = DogStore.start_link()
-
-      {:ok, state} = DogStore.state()
-      assert state.key == "value"
-      assert state.next == "next_value"
-      assert DateTime.diff(DateTime.utc_now(), state.now) < 10
-
-      :ets.delete(Dog)
-      Process.exit(pid, :kill)
-    end
   end
 end

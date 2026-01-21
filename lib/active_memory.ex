@@ -1,17 +1,17 @@
 defmodule ActiveMemory do
   @moduledoc """
-  Bring the power of in memory storage with ETS and Mnesia to your Elixir application. 
+  Bring the power of in memory storage with ETS and Mnesia to your Elixir application.
 
   ActiveMemory provides a simple interface and configuration which abstracts the ETS and Mnesia specifics and provides a common interface called a `Store`.
 
   ## Example setup
   1. Define a `Table` with attributes.
-  2. Define a `Store` with configuration settings or accept the defaults (most applications should be fine with defaults). 
+  2. Define a `Store` with configuration settings or accept the defaults (most applications should be fine with defaults).
   3. Add the `Store` to your application supervision tree.
 
   Your app is ready!
 
-  Example Table:
+  Example Mnesia (default table type) Table:
   ```elixir
   defmodule Test.Support.People.Person do
     use ActiveMemory.Table,
@@ -27,18 +27,31 @@ defmodule ActiveMemory do
     end
   end
   ```
-  Example Mnesia Store (default):
+
+  Example ETS Table:
   ```elixir
-  defmodule MyApp.People.Store do
-  use ActiveMemory.Store,
-    table: MyApp.People.Person
+  defmodule Test.Support.People.Person do
+    use ActiveMemory.Table,
+      options: [index: [:last, :cylon?]],
+      type: :ets
+
+    attributes do
+      field :email
+      field :first
+      field :last
+      field :hair_color
+      field :age
+      field :cylon?
+    end
   end
   ```
-  Example ETS Store:
+
+  Example Store:
   ```elixir
   defmodule MyApp.People.Store do
   use ActiveMemory.Store,
-    type: :ets
+    table: MyApp.People.Person,
+    before_init: [function: [arg1, arg2]]
   end
   ```
 

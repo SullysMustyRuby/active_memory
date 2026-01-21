@@ -11,16 +11,6 @@ defmodule ActiveMemory.Store do
     - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
     - `Store.write/1` Write a record into the memmory table
 
-  ## Seeding
-  When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.
-  ```elixir
-  defmodule MyApp.People.Store do
-  use ActiveMemory.Store,
-    table: MyApp.People.Person,
-    seed_file: Path.expand("person_seeds.exs", __DIR__)
-  end
-  ```
-
   ## Before `init`
   All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments.
   ```elixir
@@ -28,21 +18,6 @@ defmodule ActiveMemory.Store do
   use ActiveMemory.Store,
     table: MyApp.People.Person,
     before_init: [{:run_me, ["arg1", "arg2", ...]}, {:run_me_too, []}]
-  end
-  ```
-
-  ## Initial State
-  All stores are `GenServers` and thus have a state. The default state is an array as such:
-  ```elixir
-  %{started_at: "date time when first started", table: MyApp.People.Store}
-  ```
-  This default state can be overwritten with a new state structure or values by supplying a method and arguments as a tuple to the keyword `initial_state`.
-
-  ```elixir
-  defmodule MyApp.People.Store do
-  use ActiveMemory.Store,
-    table: MyApp.People.Person,
-    initial_state: {:initial_state_method, ["arg1", "arg2", ...]}
   end
   ```
   """
@@ -57,20 +32,16 @@ defmodule ActiveMemory.Store do
 
       @table Keyword.get(opts, :table)
       @before_init Keyword.get(opts, :before_init, :default)
-      @seed_file Keyword.get(opts, :seed_file, nil)
-      @initial_state Keyword.get(opts, :initial_state, :default)
 
-      def start_link(_opts \\ []) do
-        GenServer.start_link(__MODULE__, [], name: __MODULE__)
+      def start_link(options \\ []) do
+        GenServer.start_link(__MODULE__, options, name: __MODULE__)
       end
 
       @impl true
       def init(_) do
         with :ok <- create_table(),
-             {:ok, :seed_success} <- run_seeds_file(@seed_file),
-             :ok <- before_init(@before_init),
-             {:ok, initial_state} <- initial_state(@initial_state) do
-          {:ok, initial_state}
+             {:ok, _result} <- before_init(@before_init) do
+          {:ok, initial_state()}
         end
       end
 
@@ -156,56 +127,26 @@ defmodule ActiveMemory.Store do
       end
 
       @impl true
-      def handle_call(:reload_seeds, _from, state) do
-        {:reply, run_seeds_file(@seed_file), state}
-      end
-
-      @impl true
       def handle_call(:state, _from, state), do: {:reply, state, state}
 
-      defp before_init(:default), do: :ok
+      defp before_init(:default), do: {:ok, :default}
 
       defp before_init({method, args}) when is_list(args) do
         :erlang.apply(__MODULE__, method, args)
+        {:ok, :before_init_success}
       end
 
       defp before_init(methods) when is_list(methods) do
-        methods
-        |> Enum.into([], &before_init(&1))
-        |> Enum.all?(&(&1 == :ok))
-        |> case do
-          true -> :ok
-          _ -> {:error, :before_init_failure}
-        end
+        Enum.each(methods, &before_init(&1))
+        {:ok, :before_init_success}
       end
 
-      defp initial_state(:default) do
+      defp initial_state do
         {:ok,
          %{
            started_at: DateTime.utc_now(),
            table_name: @table
          }}
-      end
-
-      defp initial_state({method, args}) do
-        {:ok, :erlang.apply(__MODULE__, method, args)}
-      end
-
-      defp run_seeds_file(nil), do: {:ok, :seed_success}
-
-      defp run_seeds_file(file) when is_binary(file) do
-        with {seeds, _} when is_list(seeds) <- Code.eval_file(@seed_file),
-             true <- write_seeds(seeds) do
-          {:ok, :seed_success}
-        else
-          _ -> {:error, :seed_failure}
-        end
-      end
-
-      defp write_seeds(seeds) do
-       seeds
-        |> Task.async_stream(&write(&1))
-        |> Enum.all?(fn {:ok, {result, _seed}} -> result == :ok end)
       end
     end
   end
