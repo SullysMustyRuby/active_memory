@@ -51,7 +51,7 @@ defmodule ActiveMemory.Adapters.MneisaTest do
 
       assert PeopleStore.delete(karl) == :ok
 
-      assert {:ok, nil} == PeopleStore.one(%{first: "karl", last: "agathon"})
+      assert PeopleStore.one(%{first: "karl", last: "agathon"}) == {:error, :not_found}
     end
 
     test "returns ok for a record that does not exist" do
@@ -59,7 +59,7 @@ defmodule ActiveMemory.Adapters.MneisaTest do
 
       assert PeopleStore.delete(karl) == :ok
 
-      assert {:ok, nil} == PeopleStore.one(%{first: "karl", last: "agathon"})
+      assert PeopleStore.one(%{first: "karl", last: "agathon"}) == {:error, :not_found}
 
       assert PeopleStore.delete(karl) == :ok
     end
@@ -93,7 +93,7 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     end
 
     test "returns nil list when no record matches" do
-      assert {:ok, nil} == PeopleStore.one(%{first: "tiberious", last: "kirk"})
+      assert PeopleStore.one(%{first: "tiberious", last: "kirk"}) == {:error, :not_found}
     end
 
     test "returns error when more than one record" do
@@ -136,7 +136,7 @@ defmodule ActiveMemory.Adapters.MneisaTest do
 
     test "returns nil list when no record matches" do
       query = match(:first == "tiberious" and :last == "kirk")
-      assert {:ok, nil} == PeopleStore.one(query)
+      assert PeopleStore.one(query) == {:error, :not_found}
     end
 
     test "returns error when more than one record" do
@@ -271,11 +271,11 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert record.first == "erin"
       assert record.last == "boeger"
 
-      assert PeopleStore.one(%{first: "erin", last: "boeger"}) == {:ok, nil}
+      assert PeopleStore.one(%{first: "erin", last: "boeger"}) == {:error, :not_found}
     end
 
     test "returns nil list when no record matches" do
-      assert {:ok, nil} == PeopleStore.withdraw(%{first: "tiberious", last: "kirk"})
+      assert PeopleStore.withdraw(%{first: "tiberious", last: "kirk"}) == {:error, :not_found}
     end
 
     test "returns error when more than one record" do
@@ -307,7 +307,7 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert person.first == "erin"
       assert person.last == "boeger"
 
-      assert PeopleStore.one(query) == {:ok, nil}
+      assert PeopleStore.one(query) == {:error, :not_found}
     end
 
     test "returns the records that match an 'and' query" do
@@ -317,12 +317,12 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert person.hair_color == "bald"
       assert person.first == "erin"
 
-      assert PeopleStore.one(query) == {:ok, nil}
+      assert PeopleStore.one(query) == {:error, :not_found}
     end
 
     test "returns nil list when no record matches" do
       query = match(:first == "tiberious" and :last == "kirk")
-      assert {:ok, nil} == PeopleStore.withdraw(query)
+      assert PeopleStore.withdraw(query) == {:error, :not_found}
     end
 
     test "returns error when more than one record" do

@@ -42,7 +42,7 @@ defmodule ActiveMemory.Adapters.Ets do
          [record | []] when is_tuple(record) <- match_query(query, table) do
       {:ok, to_struct(record, table)}
     else
-      [] -> {:ok, nil}
+      [] -> {:error, :not_found}
       records when is_list(records) -> {:error, :more_than_one_result}
       {:error, message} -> {:error, message}
     end
@@ -52,7 +52,7 @@ defmodule ActiveMemory.Adapters.Ets do
     with [record | []] when is_tuple(record) <- select_query(query, table) do
       {:ok, to_struct(record, table)}
     else
-      [] -> {:ok, nil}
+      [] -> {:error, :not_found}
       records when is_list(records) -> {:error, :more_than_one_result}
       {:error, message} -> {:error, message}
     end

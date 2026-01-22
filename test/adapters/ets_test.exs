@@ -47,14 +47,14 @@ defmodule ActiveMemory.Adapters.EtsTest do
 
       assert DogStore.delete(dog) == :ok
 
-      assert {:ok, nil} == DogStore.one(%{name: "poopsie", breed: "Poodle"})
+      assert DogStore.one(%{name: "poopsie", breed: "Poodle"}) == {:error, :not_found}
     end
 
     test "returns ok for a record that does not exist" do
       {:ok, poopsie} = DogStore.one(%{name: "poopsie", breed: "Poodle"})
       assert DogStore.delete(poopsie) == :ok
 
-      assert {:ok, nil} == DogStore.one(%{name: "poopsie", breed: "Poodle"})
+      assert DogStore.one(%{name: "poopsie", breed: "Poodle"}) == {:error, :not_found}
       assert DogStore.delete(poopsie) == :ok
     end
 
@@ -96,7 +96,7 @@ defmodule ActiveMemory.Adapters.EtsTest do
     end
 
     test "returns nil when no record matches" do
-      assert {:ok, nil} == DogStore.one(%{breed: "wolf", name: "tiberious"})
+      assert DogStore.one(%{breed: "wolf", name: "tiberious"}) == {:error, :not_found}
     end
 
     test "returns error when more than one record" do
@@ -135,7 +135,7 @@ defmodule ActiveMemory.Adapters.EtsTest do
 
     test "returns nil list when no record matches" do
       query = match(:name == "tiberious" and :breed == "Wolf")
-      assert {:ok, nil} == DogStore.one(query)
+      assert DogStore.one(query) == {:error, :not_found}
     end
 
     test "returns error when more than one record" do
@@ -277,11 +277,11 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert dog.name == "codo"
       assert dog.breed == "Husky"
 
-      assert DogStore.one(%{name: "codo", breed: "Husky"}) == {:ok, nil}
+      assert DogStore.one(%{name: "codo", breed: "Husky"}) == {:error, :not_found}
     end
 
     test "returns nil list when no dog matches" do
-      assert {:ok, nil} == DogStore.withdraw(%{name: "tiberious", breed: "T-Rex"})
+      assert DogStore.withdraw(%{name: "tiberious", breed: "T-Rex"}) == {:error, :not_found}
     end
 
     test "returns error when more than one dog" do
@@ -309,7 +309,7 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert dog.name == "gem"
       assert dog.breed == "Shaggy Black Lab"
 
-      assert DogStore.one(query) == {:ok, nil}
+      assert DogStore.one(query) == {:error, :not_found}
     end
 
     test "returns the dogs that match an 'and' query" do
@@ -319,12 +319,12 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert dog.breed == "schnauzer"
       assert dog.name == "bill"
 
-      assert DogStore.one(query) == {:ok, nil}
+      assert DogStore.one(query) == {:error, :not_found}
     end
 
     test "returns nil list when no dog matches" do
       query = match(:name == "tiberious" and :breed == "T-Rex")
-      assert {:ok, nil} == DogStore.withdraw(query)
+      assert DogStore.withdraw(query) == {:error, :not_found}
     end
 
     test "returns error when more than one dog" do

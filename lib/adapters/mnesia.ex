@@ -56,7 +56,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
          {:atomic, record} when length(record) == 1 <- match_object(match_query) do
       {:ok, to_struct(hd(record), table)}
     else
-      {:atomic, []} -> {:ok, nil}
+      {:atomic, []} -> {:error, :not_found}
       {:atomic, records} when is_list(records) -> {:error, :more_than_one_result}
       {:error, message} -> {:error, message}
     end
@@ -67,7 +67,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
          {:atomic, record} when length(record) == 1 <- select_object(match_spec, table) do
       {:ok, to_struct(hd(record), table)}
     else
-      {:atomic, []} -> {:ok, nil}
+      {:atomic, []} -> {:error, :not_found}
       {:atomic, records} when is_list(records) -> {:error, :more_than_one_result}
       {:error, message} -> {:error, message}
     end

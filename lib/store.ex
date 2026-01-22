@@ -69,6 +69,10 @@ defmodule ActiveMemory.Store do
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query) do
         :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table])
+        case :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table]) do
+          {:ok, %{} = record} -> {:ok, record}
+          {:error, message}-> {:error, message}
+        end
       end
 
       def reload_seeds do
@@ -96,7 +100,6 @@ defmodule ActiveMemory.Store do
              :ok <- delete(record) do
           {:ok, record}
         else
-          {:ok, nil} -> {:ok, nil}
           {:error, message} -> {:error, message}
         end
       end
