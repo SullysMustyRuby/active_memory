@@ -85,6 +85,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   If you need to modify the majority use the following syntax: `[majority: true]`
   """
 
+  @spec migrate_table_options(atom()) :: :ok
   def migrate_table_options(table) do
     table.__attributes__(:table_options)
     |> migrate_table_copies_to_add(table)

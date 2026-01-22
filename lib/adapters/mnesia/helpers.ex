@@ -3,6 +3,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Helpers do
 
   @types [:set, :ordered_set, :bag]
 
+  @spec build_match_head(list(), atom()) :: tuple()
   def build_match_head(query_map, table_name) do
     query_map
     |> Enum.into([], fn {_key, value} -> value end)
@@ -10,6 +11,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Helpers do
     |> Tuple.insert_at(0, table_name)
   end
 
+  @spec build_options(atom() | list()) :: list()
   def build_options(:defaults), do: []
 
   def build_options(options) do
@@ -18,6 +20,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Helpers do
     |> Enum.reject(&is_nil/1)
   end
 
+  @spec to_struct(tuple(), atom()) :: map()
   def to_struct(tuple, module) when is_tuple(tuple),
     do:
       struct(
@@ -25,6 +28,7 @@ defmodule ActiveMemory.Adapters.Mnesia.Helpers do
         build_struct(module.__attributes__(:query_fields), Tuple.delete_at(tuple, 0))
       )
 
+  @spec to_tuple(map()) :: tuple()
   def to_tuple(%{__struct__: module} = struct) do
     module.__attributes__(:query_fields)
     |> Enum.into([], fn key -> Map.get(struct, key) end)

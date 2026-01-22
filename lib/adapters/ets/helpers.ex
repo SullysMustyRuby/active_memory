@@ -5,12 +5,14 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
   @access [:public, :protected, :private]
   @default_options [type: :set, access: :public]
 
+  @spec build_match_head(list()) :: tuple()
   def build_match_head(query_map) do
     query_map
     |> Enum.into([], fn {_key, value} -> value end)
     |> List.to_tuple()
   end
 
+  @spec build_options(atom() | list()) :: list()
   def build_options(:defaults), do: [:set, :public]
 
   def build_options(options) do
@@ -20,9 +22,11 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
     |> Enum.reject(&is_nil/1)
   end
 
+  @spec to_struct(tuple(), atom()) :: map()
   def to_struct(tuple, module) when is_tuple(tuple),
     do: struct(module, build_struct(module.__attributes__(:query_fields), tuple))
 
+  @spec to_tuple(map()) :: tuple()
   def to_tuple(%{__struct__: module} = struct) do
     module.__attributes__(:query_fields)
     |> Enum.into([], fn key -> Map.get(struct, key) end)

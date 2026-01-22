@@ -1,5 +1,7 @@
 defmodule ActiveMemory.Adapters.Mnesia do
-  @moduledoc false
+  @moduledoc """
+  An adapter for storing structs in Mnesia
+  """
 
   alias ActiveMemory.Adapters.Adapter
   alias ActiveMemory.Adapters.Mnesia.{Helpers, Migration}
@@ -7,6 +9,14 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
   @behaviour Adapter
 
+  @doc """
+  Return all structs stored in a table.
+    ```elixir
+    iex:> DogStore.all(Dog)
+    [%Dog{}, %Dog{}]
+  ```
+  """
+  @spec all(atom()) :: list(map())
   def all(table) do
     case match_object(:mnesia.table_info(table, :wild_pattern)) do
       {:atomic, []} -> []
@@ -15,7 +25,29 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end
   end
 
-  def create_table(table, _options) do
+  @doc """
+  Create a table in Mnesia using an ActiveMemory.Table.
+  This function will take in the ActiveMemory.Table and parse
+  the options for the table.
+  Example Table (without auto generated uuid):
+  ```elixir
+    defmodule Test.Support.People.Person do
+      use ActiveMemory.Table,
+        options: [index: [:last, :cylon?]]
+
+      attributes do
+       ...
+      end
+    end
+  ```
+  Once the ActiveMemory.Table is defined then the in memory table can be created.
+  ```elixir
+    iex:> PeopleStore.create_table(Test.Support.People.Person)
+    :ok
+  ```
+  """
+  @spec create_table(atom()) :: :ok | {:error, any()}
+  def create_table(table) do
     options =
       [attributes: table.__attributes__(:query_fields)]
       |> Keyword.merge(table.__attributes__(:table_options))
@@ -26,7 +58,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
       {:aborted, {:not_active, _table, new_node}} ->
         :mnesia.change_config(:extra_db_nodes, [new_node])
-        create_table(table, options)
+        create_table(table)
 
       {:aborted, {:already_exists, _table}} ->
         Migration.migrate_table_options(table)
@@ -39,6 +71,14 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end
   end
 
+  @doc """
+  Delete a struct from a table.
+  ```elixir
+    iex:> PeopleStore.delete(%Person{}, Person)
+    :ok
+  ```
+  """
+  @spec delete(map(), atom()) :: :ok | {:error, any()}
   def delete(struct, table) do
     case delete_object(struct, table) do
       {:atomic, :ok} -> :ok
@@ -46,10 +86,32 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end
   end
 
+  @doc """
+  Delete all structs from a table.
+  ```elixir
+    iex:> PeopleStore.delete_all(Person)
+    true
+  ```
+  """
+  @spec delete_all(atom()) :: true | any()
   def delete_all(table) do
     :mnesia.clear_table(table)
   end
 
+  @doc """
+  Find a single struct in a table using either a map query search or ActiveMemory.Query.MatchSpec.
+  using a map query
+  ```elixir
+    iex:> DogStore.one(%{name: "gem", breed: "Shaggy Black Lab"})
+    {:ok, %Dog{}}
+  ```
+  with ActiveMemory.Query.MatchSpec
+  ```elixir
+    iex:> DogStore.one(match(:name == "gem" and :breed == "Shaggy Black Lab"))
+    {:ok, %Dog{}}
+  ```
+  """
+  @spec one(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
   def one(query_map, table) when is_map(query_map) do
     with {:ok, query} <- MatchGuards.build(table, query_map),
          match_query <- Tuple.insert_at(query, 0, table),
@@ -73,6 +135,20 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end
   end
 
+  @doc """
+  Find a single struct in a table using either a map query search or ActiveMemory.Query.MatchSpec.
+  using a map query
+  ```elixir
+    iex:> DogStore.select(%{name: "gem", breed: "Shaggy Black Lab"})
+    {:ok, [%Dog{}, %Dog{}]}
+  ```
+  with ActiveMemory.Query.MatchSpec
+  ```elixir
+    iex:> DogStore.select(match(:name == "gem" and :breed == "Shaggy Black Lab"))
+    {:ok, [%Dog{}, %Dog{}]}
+  ```
+  """
+  @spec select(map() | tuple(), atom()) :: {:ok, list(map())} | {:error, any()}
   def select(query_map, table) when is_map(query_map) do
     with {:ok, query} <- MatchGuards.build(table, query_map),
          match_query <- Tuple.insert_at(query, 0, table),
@@ -94,6 +170,14 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end
   end
 
+  @doc """
+  Save a struct to a table.
+  ```elixir
+    iex:> DogStore.write(%Dog{name: "gem", breed: "Shaggy Black Lab"})
+    {:ok, %Dog{}}
+  ```
+  """
+  @spec write(map(), atom()) :: {:ok, map()} | {:error, any()}
   def write(struct, table) do
     case write_object(to_tuple(struct), table) do
       {:atomic, :ok} -> {:ok, struct}

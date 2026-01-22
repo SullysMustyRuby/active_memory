@@ -49,7 +49,7 @@ defmodule ActiveMemory.Store do
       def all, do: :erlang.apply(@table.__attributes__(:adapter), :all, [@table])
 
       def create_table do
-        :erlang.apply(@table.__attributes__(:adapter), :create_table, [@table, []])
+        :erlang.apply(@table.__attributes__(:adapter), :create_table, [@table])
       end
 
       @spec all() :: :ok | {:error, any()}
@@ -69,9 +69,10 @@ defmodule ActiveMemory.Store do
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query) do
         :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table])
+
         case :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table]) do
           {:ok, %{} = record} -> {:ok, record}
-          {:error, message}-> {:error, message}
+          {:error, message} -> {:error, message}
         end
       end
 
