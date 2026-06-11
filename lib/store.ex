@@ -11,6 +11,16 @@ defmodule ActiveMemory.Store do
     - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
     - `Store.write/1` Write a record into the memmory table
 
+  ## Seeding
+  When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.
+  ```elixir
+  defmodule MyApp.People.Store do
+  use ActiveMemory.Store,
+    table: MyApp.People.Person,
+    seed_file: Path.expand("person_seeds.exs", __DIR__)
+  end
+  ```
+
   ## Before `init`
   All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments.
   ```elixir
@@ -18,6 +28,21 @@ defmodule ActiveMemory.Store do
   use ActiveMemory.Store,
     table: MyApp.People.Person,
     before_init: [{:run_me, ["arg1", "arg2", ...]}, {:run_me_too, []}]
+  end
+  ```
+
+  ## Initial State
+  All stores are `GenServers` and thus have a state. The default state is a map as such:
+  ```elixir
+  %{started_at: "date time when first started", table_name: MyApp.People.Person}
+  ```
+  This default state can be overwritten with a new state structure or values by supplying a method and arguments as a tuple to the keyword `initial_state`. The method must return `{:ok, new_state}`.
+
+  ```elixir
+  defmodule MyApp.People.Store do
+  use ActiveMemory.Store,
+    table: MyApp.People.Person,
+    initial_state: {:initial_state_method, ["arg1", "arg2", ...]}
   end
   ```
   """
@@ -32,6 +57,8 @@ defmodule ActiveMemory.Store do
 
       @table Keyword.get(opts, :table)
       @before_init Keyword.get(opts, :before_init, :default)
+      @initial_state Keyword.get(opts, :initial_state, :default)
+      @seed_file Keyword.get(opts, :seed_file, nil)
 
       def start_link(options \\ []) do
         GenServer.start_link(__MODULE__, options, name: __MODULE__)
@@ -40,8 +67,10 @@ defmodule ActiveMemory.Store do
       @impl true
       def init(_) do
         with :ok <- create_table(),
-             {:ok, _result} <- before_init(@before_init) do
-          {:ok, initial_state()}
+             {:ok, :seed_success} <- __run_seeds_file__(),
+             {:ok, _result} <- before_init(@before_init),
+             {:ok, initial_state} <- __initial_state__() do
+          {:ok, initial_state}
         end
       end
 
@@ -52,7 +81,7 @@ defmodule ActiveMemory.Store do
         :erlang.apply(@table.__attributes__(:adapter), :create_table, [@table])
       end
 
-      @spec all() :: :ok | {:error, any()}
+      @spec delete(any()) :: :ok | {:error, any()}
       def delete(%{__struct__: @table} = struct) do
         :erlang.apply(@table.__attributes__(:adapter), :delete, [struct, @table])
       end
@@ -68,8 +97,6 @@ defmodule ActiveMemory.Store do
 
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query) do
-        :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table])
-
         case :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table]) do
           {:ok, %{} = record} -> {:ok, record}
           {:error, message} -> {:error, message}
@@ -131,6 +158,11 @@ defmodule ActiveMemory.Store do
       end
 
       @impl true
+      def handle_call(:reload_seeds, _from, state) do
+        {:reply, __run_seeds_file__(), state}
+      end
+
+      @impl true
       def handle_call(:state, _from, state), do: {:reply, state, state}
 
       defp before_init(:default), do: {:ok, :default}
@@ -145,12 +177,41 @@ defmodule ActiveMemory.Store do
         {:ok, :before_init_success}
       end
 
-      defp initial_state do
-        {:ok,
-         %{
-           started_at: DateTime.utc_now(),
-           table_name: @table
-         }}
+      # Only the clause matching the compile-time option is generated so the
+      # Elixir 1.19+ type checker never sees an unreachable clause.
+      if @initial_state == :default do
+        defp __initial_state__ do
+          {:ok,
+           %{
+             started_at: DateTime.utc_now(),
+             table_name: @table
+           }}
+        end
+      else
+        defp __initial_state__ do
+          {method, args} = @initial_state
+          :erlang.apply(__MODULE__, method, args)
+        end
+      end
+
+      if @seed_file == nil do
+        defp __run_seeds_file__, do: {:ok, :seed_success}
+      else
+        defp __run_seeds_file__ do
+          with {seeds, _} when is_list(seeds) <- Code.eval_file(@seed_file),
+               true <- write_seeds(seeds) do
+            {:ok, :seed_success}
+          else
+            {:error, message} -> {:error, message}
+            _ -> {:error, :seed_failure}
+          end
+        end
+
+        defp write_seeds(seeds) do
+          seeds
+          |> Task.async_stream(&write(&1))
+          |> Enum.all?(fn {:ok, {result, _seed}} -> result == :ok end)
+        end
       end
     end
   end

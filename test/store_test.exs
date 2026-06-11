@@ -3,8 +3,8 @@ defmodule ActiveMemory.StoreTest do
 
   alias Test.Support.Dogs.Dog
   alias Test.Support.Dogs.Store, as: DogStore
-  alias Test.Support.People.Store, as: PeopleStore
   alias Test.Support.People.Person
+  alias Test.Support.People.Store, as: PeopleStore
 
   describe "init with options" do
     test "with a valid seed file populates the store" do
@@ -12,6 +12,15 @@ defmodule ActiveMemory.StoreTest do
 
       people = PeopleStore.all()
       assert length(people) == 10
+
+      :mnesia.delete_table(Person)
+      Process.exit(pid, :kill)
+    end
+
+    test "with no initial_state option sets the default state" do
+      {:ok, pid} = PeopleStore.start_link()
+
+      assert %{started_at: %DateTime{}, table_name: Person} = PeopleStore.state()
 
       :mnesia.delete_table(Person)
       Process.exit(pid, :kill)
@@ -34,6 +43,30 @@ defmodule ActiveMemory.StoreTest do
       assert dog.name == "Blue"
 
       :ets.delete(Dog)
+      Process.exit(pid, :kill)
+    end
+
+    test "with initial_state option sets the custom state" do
+      {:ok, pid} = DogStore.start_link()
+
+      assert %{key: "arg1", next: "arg2", now: %DateTime{}} = DogStore.state()
+
+      :ets.delete(Dog)
+      Process.exit(pid, :kill)
+    end
+  end
+
+  describe "reload_seeds/0" do
+    test "repopulates the store from the seed file" do
+      {:ok, pid} = PeopleStore.start_link()
+
+      PeopleStore.delete_all()
+      assert PeopleStore.all() == []
+
+      assert PeopleStore.reload_seeds() == {:ok, :seed_success}
+      assert length(PeopleStore.all()) == 10
+
+      :mnesia.delete_table(Person)
       Process.exit(pid, :kill)
     end
   end

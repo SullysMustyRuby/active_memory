@@ -1,7 +1,8 @@
 defmodule Test.Support.Dogs.Store do
   use ActiveMemory.Store,
     table: Test.Support.Dogs.Dog,
-    before_init: [{:run_me, ["Blue"]}]
+    before_init: [{:run_me, ["Blue"]}],
+    initial_state: {:initial_state, ["arg1", "arg2"]}
 
   def run_me(name) do
     %Test.Support.Dogs.Dog{
