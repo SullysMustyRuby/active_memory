@@ -6,7 +6,7 @@ defmodule ActiveMemory.MixProject do
   @github "https://github.com/SullysMustyRuby/active_memory"
   @license "MIT"
   @name "ActiveMemory"
-  @version "0.3.1"
+  @version "0.3.2"
 
   def project do
     [
@@ -49,9 +49,9 @@ defmodule ActiveMemory.MixProject do
   defp deps do
     [
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ecto, "~> 3.0"},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
-      {:local_cluster, "~> 1.2", only: [:test]},
-      {:uuid, "~> 1.1"}
+      {:local_cluster, "~> 1.2", only: [:test]}
     ]
   end
 

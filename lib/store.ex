@@ -145,7 +145,7 @@ defmodule ActiveMemory.Store do
       defp write_with_uuid(%@table{} = struct) do
         case Map.get(struct, :uuid) do
           nil ->
-            with_uuid = Map.put(struct, :uuid, UUID.uuid4())
+            with_uuid = Map.put(struct, :uuid, Ecto.UUID.generate())
             :erlang.apply(@table.__attributes__(:adapter), :write, [with_uuid, @table])
 
           uuid when is_binary(uuid) ->
