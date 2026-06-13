@@ -2,9 +2,6 @@
 
 ## **A Simple ORM for ETS and Mnesia**
 
-<h4 style="color: red">Please note!</h4> 
-<p style="color: red">This is still a work in progess and feedback is appreciated</p>
-
 ## Overview 
 
 A package to help bring the power of in memory storage with ETS and Mnesia to your Elixir application. 
