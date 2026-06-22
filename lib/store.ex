@@ -55,6 +55,7 @@ defmodule ActiveMemory.Store do
 
       opts = unquote(Macro.expand(opts, __CALLER__))
 
+      ##### FIX do we need to parse these here? Can we just parse as needed?
       @table Keyword.get(opts, :table)
       @before_init Keyword.get(opts, :before_init, :default)
       @initial_state Keyword.get(opts, :initial_state, :default)
@@ -64,6 +65,7 @@ defmodule ActiveMemory.Store do
         GenServer.start_link(__MODULE__, options, name: __MODULE__)
       end
 
+      ##### FIX else fallthrough #####
       @impl true
       def init(_) do
         with :ok <- create_table(),
@@ -177,6 +179,13 @@ defmodule ActiveMemory.Store do
         {:ok, :before_init_success}
       end
 
+      defp write_seeds(seeds) do
+        seeds
+        |> Task.async_stream(&write(&1))
+        |> Enum.all?(fn {:ok, {result, _seed}} -> result == :ok end)
+      end
+
+      ##### FIX this is ugly AI gen
       # Only the clause matching the compile-time option is generated so the
       # Elixir 1.19+ type checker never sees an unreachable clause.
       if @initial_state == :default do
@@ -207,11 +216,6 @@ defmodule ActiveMemory.Store do
           end
         end
 
-        defp write_seeds(seeds) do
-          seeds
-          |> Task.async_stream(&write(&1))
-          |> Enum.all?(fn {:ok, {result, _seed}} -> result == :ok end)
-        end
       end
     end
   end
