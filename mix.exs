@@ -6,7 +6,7 @@ defmodule ActiveMemory.MixProject do
   @github "https://github.com/SullysMustyRuby/active_memory"
   @license "MIT"
   @name "ActiveMemory"
-  @version "0.4.0"
+  @version "0.5.0"
 
   def project do
     [
@@ -43,7 +43,8 @@ defmodule ActiveMemory.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :mnesia]
+      extra_applications: [:logger, :mnesia],
+      mod: {ActiveMemory.Application, []}
     ]
   end
 

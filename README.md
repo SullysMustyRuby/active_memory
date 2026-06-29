@@ -118,6 +118,23 @@ defmodule MyApp.People.Store do
 end
 ```
 
+> **⚠️ `before_init` and table recovery**
+>
+> For ETS stores the table is preserved across a store crash/restart by the table heir (see [Resilience](#resilience)). On such a recovery seed files are **not** re-run, but `before_init` methods **always** run, including on recovery. If a `before_init` method writes records with unique or generated keys (for example a `uuid`), running it again on recovery can create duplicates.
+>
+> How to handle this is left to the implementer. One option is to make any `before_init` write follow a "find or create" pattern — check with `one/1` before calling `write/1` — so the method is idempotent across restarts:
+>
+> ```elixir
+> def run_me(args) do
+>   record = build_record(args)
+>
+>   case one(%{key: record.key}) do
+>     {:ok, existing} -> {:ok, existing}
+>     {:error, :not_found} -> write(record)
+>   end
+> end
+> ```
+
 ##  Initial State
 All stores are `GenServers` and thus have a state. The default state is an array as such:
 ```elixir
@@ -132,6 +149,23 @@ defmodule MyApp.People.Store do
     initial_state: {:initial_state_method, ["arg1", "arg2", ...]}
 end
 ```
+
+## Resilience
+An ETS table is owned by the process that creates it, so if a `Store` were to crash the table — and all of its data — would normally be destroyed and recreated empty when the supervisor restarts the `Store`.
+
+`ActiveMemory` guards against this automatically. The library starts a small, stable process, `ActiveMemory.TableHeir`, and registers it as the ETS [`:heir`](https://www.erlang.org/doc/man/ets.html#new-2) for every table a `Store` creates. When a `Store` process terminates, ETS transfers the table to the heir instead of destroying it. When the supervisor restarts the `Store`, it reclaims the table from the heir with the data intact.
+
+This requires **no configuration and no API changes**: the heir is started as part of the `:active_memory` application, and the `Store` functions behave exactly as before. When the heir is not running, stores fall back to creating a fresh table.
+
+```elixir
+# A store crashes...               the table survives (held by the heir)
+# ...the supervisor restarts it...  the store reclaims the table, data intact
+```
+
+A few things to be aware of:
+- **Seeds are skipped on recovery.** A recovered table already holds its data, so a configured `seed_file` is not re-run. `before_init` methods, however, always run — see the warning in [Before `init`](#before-init).
+- **Mnesia stores are unaffected.** Mnesia tables are owned by the Mnesia subsystem rather than the `Store` process, so they already survive a `Store` crash; the heir is purely an ETS concern.
+- **Scope is process crashes, not node restarts.** The heir protects against `Store` crashes and supervisor restarts. It does **not** protect against a full node/BEAM restart, which clears all ETS regardless. For data that must survive a restart, use a Mnesia store with `disc_copies`.
 
 ## Installation
 

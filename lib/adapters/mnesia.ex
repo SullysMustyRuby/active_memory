@@ -9,6 +9,8 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
   @behaviour Adapter
 
+  @table_wait_timeout 5_000
+
   @doc """
   Return all structs stored in a table.
     ```elixir
@@ -46,7 +48,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
     :ok
   ```
   """
-  @spec create_table(atom()) :: :ok | {:error, any()}
+  @spec create_table(atom()) :: {:ok, :created | :recovered} | {:error, any()}
   def create_table(table) do
     options =
       [attributes: table.__attributes__(:query_fields)]
@@ -54,7 +56,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
     case :mnesia.create_table(table, options) do
       {:atomic, :ok} ->
-        :mnesia.wait_for_tables([table], 5000)
+        wait_for_table(table)
 
       {:aborted, {:not_active, _table, new_node}} ->
         :mnesia.change_config(:extra_db_nodes, [new_node])
@@ -62,9 +64,11 @@ defmodule ActiveMemory.Adapters.Mnesia do
 
       {:aborted, {:already_exists, _table}} ->
         Migration.migrate_table_options(table)
+        {:ok, :recovered}
 
       {:aborted, {:already_exists, _table, _node}} ->
         Migration.migrate_table_options(table)
+        {:ok, :recovered}
 
       {:aborted, message} ->
         {:error, message}
@@ -235,6 +239,14 @@ defmodule ActiveMemory.Adapters.Mnesia do
     :mnesia.transaction(fn ->
       :mnesia.select(table, match_spec, :read)
     end)
+  end
+
+  defp wait_for_table(table) do
+    case :mnesia.wait_for_tables([table], @table_wait_timeout) do
+      :ok -> {:ok, :created}
+      {:timeout, bad_tables} -> {:error, {:timeout, bad_tables}}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp withdraw_match_object(match_query, table) do

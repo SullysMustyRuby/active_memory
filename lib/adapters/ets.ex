@@ -6,6 +6,7 @@ defmodule ActiveMemory.Adapters.Ets do
   alias ActiveMemory.Adapters.Adapter
   alias ActiveMemory.Adapters.Ets.Helpers
   alias ActiveMemory.Query.{MatchGuards, MatchSpec}
+  alias ActiveMemory.TableHeir
 
   @behaviour Adapter
 
@@ -44,15 +45,11 @@ defmodule ActiveMemory.Adapters.Ets do
     :ok
   ```
   """
-  @spec create_table(atom()) :: :ok | {:error, any()}
+  @spec create_table(atom()) :: {:ok, :created | :recovered} | {:error, any()}
   def create_table(table) do
-    options = table.__attributes__(:table_options)
-
-    try do
-      :ets.new(table, [:named_table | options])
-      :ok
-    rescue
-      ArgumentError -> {:error, :create_table_failed}
+    case :ets.whereis(table) do
+      :undefined -> create_new_table(table)
+      _table_ref -> recover_table(table)
     end
   end
 
@@ -195,8 +192,37 @@ defmodule ActiveMemory.Adapters.Ets do
     end
   end
 
+  defp create_new_table(table) do
+    options = table.__attributes__(:table_options)
+
+    try do
+      :ets.new(table, [:named_table | heir_options(table) ++ options])
+      {:ok, :created}
+    rescue
+      ArgumentError -> {:error, :create_table_failed}
+    end
+  end
+
+  defp heir_options(table) do
+    case TableHeir.whereis() do
+      nil -> []
+      heir_pid -> [{:heir, heir_pid, table}]
+    end
+  end
+
   defp match_query(query, table) do
     :ets.match_object(table, query)
+  end
+
+  defp recover_table(table) do
+    with heir_pid when is_pid(heir_pid) <- TableHeir.whereis(),
+         :ok <- TableHeir.claim(table) do
+      :ets.setopts(table, {:heir, heir_pid, table})
+      {:ok, :recovered}
+    else
+      nil -> {:error, :create_table_failed}
+      {:error, :not_held} -> {:error, :create_table_failed}
+    end
   end
 
   defp select_query(query, table) do
