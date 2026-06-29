@@ -172,6 +172,36 @@ A few things to be aware of:
 - **Mnesia stores are unaffected.** Mnesia tables are owned by the Mnesia subsystem rather than the `Store` process, so they already survive a `Store` crash; the heir is purely an ETS concern.
 - **Scope is process crashes, not node restarts.** The heir protects against `Store` crashes and supervisor restarts. It does **not** protect against a full node/BEAM restart, which clears all ETS regardless. For data that must survive a restart, use a Mnesia store with `disc_copies`.
 
+## Expiry (TTL)
+Give a `Table` a `ttl` (time-to-live, in milliseconds) and its records expire automatically — ideal for the one-time tokens, 2FA codes, magic links and short-lived API keys in [Potential Use Cases](#potential-use-cases).
+
+```elixir
+defmodule MyApp.Tokens.Token do
+  use ActiveMemory.Table,
+    type: :ets,
+    ttl: :timer.hours(1)
+
+  attributes do
+    field(:token)
+    field(:user_id)
+  end
+end
+```
+
+A `ttl` adds an `expires_at` field (appended last, so it never becomes the table key) and stamps it on each write as `now + ttl`. Expiry is then enforced in two complementary ways:
+
+- **Lazy filter on read** — `one`, `select`, `all` and `withdraw` never return an expired record. This is immediate and exact: a record is unreadable the instant it expires.
+- **Periodic sweep** — the owning `Store`/`ActiveRepo` deletes expired records on a timer to reclaim memory. The cadence defaults to one minute and is configurable per process:
+
+```elixir
+use ActiveMemory.Store, table: MyApp.Tokens.Token, sweep_interval: :timer.seconds(30)
+```
+
+Notes:
+- The sweep only runs when a table declares a `ttl`; non-TTL tables are untouched and incur zero overhead.
+- `expires_at` is plain data, so it survives [`Resilience`](#resilience) recovery — TTL keeps working after a crash.
+- Works the same for `:ets` and `:mnesia`, and for both a `Store` and an `ActiveRepo` (where each table can have its own `ttl`).
+
 ## Multiple tables with an ActiveRepo
 A `Store` manages a single `Table`. When you want one supervised entry point over **several** tables, use an `ActiveMemory.ActiveRepo` — the multi-table counterpart to a `Store`. (It is named `ActiveRepo` rather than `Repo` so it does not collide with an application's `Ecto.Repo`.)
 
