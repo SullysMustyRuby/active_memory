@@ -19,6 +19,12 @@ defmodule ActiveMemory.MixProject do
       deps: deps(),
       package: package(),
 
+      # Support modules and seed files under test/support are loaded manually by
+      # test/test_helper.exs, so exclude them from the Elixir 1.19+ test file scan.
+      test_ignore_filters: [
+        ~r"^test/support/"
+      ],
+
       # ExDoc
       name: @name,
       source_url: @github,
