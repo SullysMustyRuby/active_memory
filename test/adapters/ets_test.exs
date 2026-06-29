@@ -11,7 +11,15 @@ defmodule ActiveMemory.Adapters.EtsTest do
   setup_all do
     {:ok, pid} = DogStore.start_link()
 
-    on_exit(fn -> Process.exit(pid, :kill) end)
+    on_exit(fn ->
+      Process.exit(pid, :kill)
+      # The heir now preserves the table past the owner's death, so delete it
+      # explicitly to keep it from leaking into other test modules.
+      case :ets.whereis(Dog) do
+        :undefined -> :ok
+        _table_ref -> :ets.delete(Dog)
+      end
+    end)
 
     {:ok, %{pid: pid}}
   end
