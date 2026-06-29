@@ -6,12 +6,12 @@
 
 A package to help bring the power of in memory storage with ETS and Mnesia to your Elixir application. 
 
-ActiveMemory provides a simple interface and configuration which abstracts the ETS and Mnesia specifics and provides a common interface called a `Store`.
+ActiveMemory provides a simple interface and configuration which abstracts the ETS and Mnesia specifics and provides a common interface called a [`Store`](#store-api) or if you need multiple tables/structs an [`ActiveRepo`](#multiple-tables-with-an-activerepo).
 
 ## Example setup
 1. Define a `Table` with attributes.
-2. Define a `Store` with configuration settings or accept the defaults (most applications should be fine with defaults). 
-3. Add the `Store` to your application supervision tree.
+2. Define a `Store` or an `ActiveRepo` with configuration settings or accept the defaults (most applications should be fine with defaults). 
+3. Add the `Store` or `ActiveRepo` to your application supervision tree.
 
 Your app is ready!
 
@@ -181,6 +181,7 @@ defmodule MyApp.ActiveRepo do
     tables: [
       MyApp.People.Person,
       {MyApp.Dogs.Dog, seed_file: Path.expand("dog_seeds.exs", __DIR__), before_init: [{:warm, []}]}
+      ..other Table
     ]
 end
 ```
