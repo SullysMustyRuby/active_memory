@@ -171,6 +171,40 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   @doc """
+  Atomically find a single struct matching the query, delete it, and return it.
+
+  The find and delete run inside a single `:mnesia.transaction/1`, so under
+  concurrent access exactly one caller receives `{:ok, struct}` for a given record;
+  any others receive `{:error, :not_found}`.
+  ```elixir
+    iex:> DogStore.withdraw(%{name: "gem", breed: "Shaggy Black Lab"})
+    {:ok, %Dog{}}
+  ```
+  """
+  @spec withdraw(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
+  def withdraw(query_map, table) when is_map(query_map) do
+    with {:ok, query} <- MatchGuards.build(table, query_map),
+         match_query <- Tuple.insert_at(query, 0, table),
+         {:atomic, {:ok, record}} <- withdraw_match_object(match_query, table) do
+      {:ok, to_struct(record, table)}
+    else
+      {:atomic, {:error, message}} -> {:error, message}
+      {:error, message} -> {:error, message}
+      {:aborted, message} -> {:error, message}
+    end
+  end
+
+  def withdraw(query, table) when is_tuple(query) do
+    with match_spec <- build_mnesia_match_spec(query, table),
+         {:atomic, {:ok, record}} <- withdraw_select_object(match_spec, table) do
+      {:ok, to_struct(record, table)}
+    else
+      {:atomic, {:error, message}} -> {:error, message}
+      {:aborted, message} -> {:error, message}
+    end
+  end
+
+  @doc """
   Save a struct to a table.
   ```elixir
     iex:> DogStore.write(%Dog{name: "gem", breed: "Shaggy Black Lab"})
@@ -203,11 +237,33 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end)
   end
 
+  defp withdraw_match_object(match_query, table) do
+    :mnesia.transaction(fn ->
+      delete_matched(:mnesia.match_object(table, match_query, :write), table)
+    end)
+  end
+
+  defp withdraw_select_object(match_spec, table) do
+    :mnesia.transaction(fn ->
+      delete_matched(:mnesia.select(table, match_spec, :read), table)
+    end)
+  end
+
   defp write_object(object, table) do
     :mnesia.transaction(fn ->
       :mnesia.write(table, object, :write)
     end)
   end
+
+  defp delete_matched([record], table) do
+    :ok = :mnesia.delete_object(table, record, :write)
+    {:ok, record}
+  end
+
+  defp delete_matched([], _table), do: {:error, :not_found}
+
+  defp delete_matched(records, _table) when is_list(records),
+    do: {:error, :more_than_one_result}
 
   defp build_mnesia_match_spec(query, table) do
     query_map = :erlang.apply(table, :__attributes__, [:query_map])

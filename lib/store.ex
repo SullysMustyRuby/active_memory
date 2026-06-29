@@ -124,12 +124,7 @@ defmodule ActiveMemory.Store do
 
       @spec withdraw(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def withdraw(query) do
-        with {:ok, %{} = record} <- one(query),
-             :ok <- delete(record) do
-          {:ok, record}
-        else
-          {:error, message} -> {:error, message}
-        end
+        :erlang.apply(@table.__attributes__(:adapter), :withdraw, [query, @table])
       end
 
       @spec write(map()) :: {:ok, map()} | {:error, any()}

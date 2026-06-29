@@ -154,6 +154,29 @@ defmodule ActiveMemory.Adapters.Ets do
   end
 
   @doc """
+  Atomically find a single struct matching the query, delete it, and return it.
+
+  The delete is performed with `:ets.select_delete/2`, so the find-and-remove is a
+  single atomic ETS operation. Under concurrent access exactly one caller receives
+  `{:ok, struct}` for a given record; any others receive `{:error, :not_found}`.
+  ```elixir
+    iex:> DogStore.withdraw(%{name: "gem", breed: "Shaggy Black Lab"})
+    {:ok, %Dog{}}
+  ```
+  """
+  @spec withdraw(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
+  def withdraw(query, table) do
+    with {:ok, struct} <- one(query, table),
+         ets_tuple <- to_tuple(struct),
+         count when count >= 1 <- :ets.select_delete(table, [{ets_tuple, [], [true]}]) do
+      {:ok, struct}
+    else
+      0 -> {:error, :not_found}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  @doc """
   Save a struct to a table.
   ```elixir
     iex:> DogStore.write(%Dog{name: "gem", breed: "Shaggy Black Lab"})

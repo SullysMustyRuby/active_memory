@@ -17,5 +17,9 @@ defmodule ActiveMemory.Adapters.Adapter do
 
   @callback select(list(any()), atom()) :: {:ok, list(map())} | {:error, any()}
 
+  @callback withdraw(map(), atom()) :: {:ok, map()} | {:error, any()}
+
+  @callback withdraw(list(any()), atom()) :: {:ok, map()} | {:error, any()}
+
   @callback write(map(), atom()) :: {:ok, map()} | {:error, any()}
 end
