@@ -27,6 +27,21 @@ defmodule ActiveMemory.Store do
   [S.T.O.N.E principles](https://www.hpt-consulting.org/blog/stone-principles) for
   the broader design philosophy.
 
+  ## Expiry (TTL)
+  When the `Store`'s `Table` declares a `ttl` (see `ActiveMemory.Table`), records
+  expire automatically. Expiry is enforced in two ways: reads (`one/1`, `select/1`,
+  `all/0`, `withdraw/1`) never return an expired record, and the `Store` periodically
+  sweeps expired records to reclaim memory. The sweep cadence defaults to one minute
+  and can be set with the `sweep_interval` option (milliseconds):
+  ```elixir
+  defmodule MyApp.Tokens.Store do
+  use ActiveMemory.Store,
+    table: MyApp.Tokens.Token,
+    sweep_interval: :timer.seconds(30)
+  end
+  ```
+  The sweep only runs when the table has a `ttl`; otherwise it is never scheduled.
+
   ## Seeding
   When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.
   ```elixir
@@ -86,6 +101,8 @@ defmodule ActiveMemory.Store do
   ```
   """
 
+  @default_sweep_interval :timer.seconds(60)
+
   defmacro __using__(opts) do
     quote do
       import unquote(__MODULE__)
@@ -100,6 +117,7 @@ defmodule ActiveMemory.Store do
       @before_init Keyword.get(opts, :before_init, :default)
       @initial_state Keyword.get(opts, :initial_state, :default)
       @seed_file Keyword.get(opts, :seed_file, nil)
+      @sweep_interval Keyword.get(opts, :sweep_interval, unquote(@default_sweep_interval))
 
       def start_link(options \\ []) do
         GenServer.start_link(__MODULE__, options, name: __MODULE__)
@@ -111,6 +129,7 @@ defmodule ActiveMemory.Store do
              {:ok, :seed_success} <- __maybe_run_seeds__(table_status),
              {:ok, _result} <- Operations.before_init(@before_init, __MODULE__),
              {:ok, initial_state} <- __initial_state__() do
+          __schedule_sweep__()
           {:ok, initial_state}
         end
       end
@@ -162,6 +181,13 @@ defmodule ActiveMemory.Store do
         {:noreply, state}
       end
 
+      # Periodically reclaims memory from expired records when the table has a `ttl`.
+      def handle_info(:sweep, state) do
+        Operations.delete_expired(@table, System.system_time(:millisecond))
+        __schedule_sweep__()
+        {:noreply, state}
+      end
+
       def handle_info(_message, state), do: {:noreply, state}
 
       # A recovered table already holds its data, so seeding is skipped to avoid
@@ -169,6 +195,14 @@ defmodule ActiveMemory.Store do
       defp __maybe_run_seeds__(:recovered), do: {:ok, :seed_success}
 
       defp __maybe_run_seeds__(:created), do: Operations.seed(@seed_file, @table)
+
+      # Schedules the next expiry sweep only when the table actually uses a `ttl`.
+      defp __schedule_sweep__ do
+        case @table.__attributes__(:ttl) do
+          nil -> :ok
+          _ttl -> Process.send_after(self(), :sweep, @sweep_interval)
+        end
+      end
 
       # Only the clause matching the compile-time option is generated so the
       # Elixir 1.19+ type checker never sees an unreachable clause.

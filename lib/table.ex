@@ -53,6 +53,23 @@ defmodule ActiveMemory.Table do
     options: [compressed: true, read_concurrency: true, type: :protected]
   ```
 
+  ### Record Expiry (`ttl`)
+  Pass a `ttl` (time-to-live, in milliseconds) to give every record in the table a
+  lifetime. A `ttl` adds an `expires_at` field to the schema (appended last, so it
+  never becomes the table key) and stamps it on each write as `now + ttl`.
+
+  ```elixir
+  use ActiveMemory.Table,
+    type: :ets,
+    ttl: :timer.hours(1)
+  ```
+
+  Expiry is enforced in two complementary ways (see `ActiveMemory.Store` and
+  `ActiveMemory.ActiveRepo`): reads never return an expired record, and the owning
+  `Store`/`ActiveRepo` periodically sweeps expired records to reclaim memory. This
+  makes a `ttl` table well suited to one time use tokens, 2FA codes, magic links
+  and similar short-lived data.
+
   ### Mnesia Options
   #### Table Read and Write Access
   Mnesia tables can be set to `read_only` or `read_write`. The default is `read_write`.
@@ -152,6 +169,8 @@ defmodule ActiveMemory.Table do
         :table_options,
         Helpers.build_options(table_options, table_type)
       )
+
+      Module.put_attribute(__MODULE__, :ttl, Keyword.get(opts, :ttl, nil))
     end
   end
 
@@ -252,6 +271,12 @@ defmodule ActiveMemory.Table do
         after
           :ok
         end
+
+        # When a `ttl` is configured the `expires_at` field is appended last so it
+        # never displaces the table key (the first query field, or the uuid).
+        if Module.get_attribute(__MODULE__, :ttl) do
+          ActiveMemory.Table.__field__(__MODULE__, :expires_at, [])
+        end
       end
 
     postlude =
@@ -281,6 +306,8 @@ defmodule ActiveMemory.Table do
         def __attributes__(:query_map), do: unquote(query_map)
 
         def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
+
+        def __attributes__(:ttl), do: unquote(Macro.escape(@ttl))
 
         for clauses <-
               ActiveMemory.Table.__attributes__(

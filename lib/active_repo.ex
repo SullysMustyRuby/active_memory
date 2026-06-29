@@ -61,6 +61,14 @@ defmodule ActiveMemory.ActiveRepo do
     - `seed_file` a path to a seed file auto loaded when the table is first created
     - `before_init` methods (defined on the `ActiveRepo`) run during the table's setup
 
+  ## Expiry (TTL)
+  Any table whose `ActiveMemory.Table` declares a `ttl` expires its records
+  automatically: reads never return an expired record, and the `ActiveRepo`
+  periodically sweeps expired records from every `ttl` table it owns to reclaim
+  memory. The sweep cadence defaults to one minute and can be set with the
+  `sweep_interval` option (milliseconds). Tables without a `ttl` are left untouched,
+  and the sweep is only scheduled when at least one table uses a `ttl`.
+
   ## Initial State
   Like a `Store`, an `ActiveRepo` is a `GenServer` with state. The default state is:
   ```elixir
@@ -76,6 +84,8 @@ defmodule ActiveMemory.ActiveRepo do
   the `before_init` recovery caveat, which applies here as well.
   """
 
+  @default_sweep_interval :timer.seconds(60)
+
   defmacro __using__(opts) do
     quote do
       use GenServer
@@ -90,6 +100,7 @@ defmodule ActiveMemory.ActiveRepo do
                    end)
       @tables Enum.map(@repo_tables, fn {table, _opts} -> table end)
       @initial_state Keyword.get(opts, :initial_state, :default)
+      @sweep_interval Keyword.get(opts, :sweep_interval, unquote(@default_sweep_interval))
 
       def start_link(options \\ []) do
         GenServer.start_link(__MODULE__, options, name: __MODULE__)
@@ -99,6 +110,7 @@ defmodule ActiveMemory.ActiveRepo do
       def init(_) do
         with :ok <- __setup_tables__(),
              {:ok, initial_state} <- __initial_state__() do
+          __schedule_sweep__()
           {:ok, initial_state}
         end
       end
@@ -168,6 +180,21 @@ defmodule ActiveMemory.ActiveRepo do
         {:noreply, state}
       end
 
+      # Periodically reclaims memory from expired records across every `ttl` table.
+      def handle_info(:sweep, state) do
+        now = System.system_time(:millisecond)
+
+        Enum.each(@repo_tables, fn {table, _opts} ->
+          case table.__attributes__(:ttl) do
+            nil -> :ok
+            _ttl -> Operations.delete_expired(table, now)
+          end
+        end)
+
+        __schedule_sweep__()
+        {:noreply, state}
+      end
+
       def handle_info(_message, state), do: {:noreply, state}
 
       # Only the clause matching the compile-time option is generated so the
@@ -190,6 +217,14 @@ defmodule ActiveMemory.ActiveRepo do
       defp __maybe_seed__(:recovered, _seed_file, _table), do: {:ok, :seed_success}
 
       defp __maybe_seed__(:created, seed_file, table), do: Operations.seed(seed_file, table)
+
+      # Schedules the next expiry sweep only when at least one table uses a `ttl`.
+      defp __schedule_sweep__ do
+        case Enum.any?(@tables, fn table -> table.__attributes__(:ttl) end) do
+          true -> Process.send_after(self(), :sweep, @sweep_interval)
+          false -> :ok
+        end
+      end
 
       defp __seed_file__(table) do
         {_table, table_opts} = List.keyfind(@repo_tables, table, 0)

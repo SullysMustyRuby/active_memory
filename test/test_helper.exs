@@ -9,6 +9,10 @@ Code.require_file("support/multi/gadget.ex", __DIR__)
 Code.require_file("support/multi/gizmo.ex", __DIR__)
 Code.require_file("support/multi/repo.ex", __DIR__)
 Code.require_file("support/multi/init_repo.ex", __DIR__)
+Code.require_file("support/ttl/token.ex", __DIR__)
+Code.require_file("support/ttl/token_store.ex", __DIR__)
+Code.require_file("support/ttl/session.ex", __DIR__)
+Code.require_file("support/ttl/repo.ex", __DIR__)
 Code.require_file("support/process_helper.ex", __DIR__)
 
 # start the current node as a manager uncomment for running migration tests
