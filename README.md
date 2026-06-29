@@ -167,6 +167,38 @@ A few things to be aware of:
 - **Mnesia stores are unaffected.** Mnesia tables are owned by the Mnesia subsystem rather than the `Store` process, so they already survive a `Store` crash; the heir is purely an ETS concern.
 - **Scope is process crashes, not node restarts.** The heir protects against `Store` crashes and supervisor restarts. It does **not** protect against a full node/BEAM restart, which clears all ETS regardless. For data that must survive a restart, use a Mnesia store with `disc_copies`.
 
+## Multiple tables with an ActiveRepo
+A `Store` manages a single `Table`. When you want one supervised entry point over **several** tables, use an `ActiveMemory.ActiveRepo` — the multi-table counterpart to a `Store`. (It is named `ActiveRepo` rather than `Repo` so it does not collide with an application's `Ecto.Repo`.)
+
+```elixir
+defmodule MyApp.ActiveRepo do
+  use ActiveMemory.ActiveRepo,
+    tables: [
+      MyApp.People.Person,
+      {MyApp.Dogs.Dog, seed_file: Path.expand("dog_seeds.exs", __DIR__), before_init: [{:warm, []}]}
+    ]
+end
+```
+
+Add it to your supervision tree like any other process (`children = [MyApp.ActiveRepo]`). Tables may freely mix `:ets` and `:mnesia`; each call dispatches to the adapter configured on the given table.
+
+### ActiveRepo API
+Reads and `withdraw` take the table module as the first argument; writes and deletes infer the table from the struct:
+```elixir
+MyApp.ActiveRepo.write(%Person{...})          # table inferred from the struct
+MyApp.ActiveRepo.withdraw(Dog, query)         # reads take the table explicitly
+MyApp.ActiveRepo.all(Person)
+MyApp.ActiveRepo.one(Dog, %{name: "gem"})
+MyApp.ActiveRepo.select(Person, query)
+MyApp.ActiveRepo.delete(%Dog{} = dog)
+MyApp.ActiveRepo.delete_all(Person)
+```
+- `ActiveRepo.all/1`, `ActiveRepo.delete/1`, `ActiveRepo.delete_all/1`, `ActiveRepo.one/2`, `ActiveRepo.select/2`, `ActiveRepo.withdraw/2`, `ActiveRepo.write/1`
+- An operation for a struct or table that is not part of the `ActiveRepo` returns `{:error, :unknown_table}`.
+
+### Per-table options
+Each `tables:` entry is a table module or a `{table, opts}` tuple. Per-table `seed_file` and `before_init` work exactly as they do for a `Store`; `initial_state` is an `ActiveRepo`-level option (one process, one state). Seeding, the [query interface](#query-interface) and [Resilience](#resilience) all behave the same as for a `Store` — including the [`before_init` recovery caveat](#before-init).
+
 ## Installation
 
 The package can be installed

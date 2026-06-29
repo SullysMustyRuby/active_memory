@@ -5,14 +5,16 @@ defmodule ActiveMemory.Adapters.EtsTest do
   alias Test.Support.Dogs.Dog
   alias Test.Support.Dogs.Store, as: DogStore
   alias Test.Support.People.Person
+  alias Test.Support.ProcessHelper
 
   import ActiveMemory.Query
 
   setup_all do
+    ProcessHelper.stop(DogStore)
     {:ok, pid} = DogStore.start_link()
 
     on_exit(fn ->
-      Process.exit(pid, :kill)
+      ProcessHelper.stop(DogStore)
       # The heir now preserves the table past the owner's death, so delete it
       # explicitly to keep it from leaking into other test modules.
       case :ets.whereis(Dog) do

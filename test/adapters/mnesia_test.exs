@@ -5,12 +5,14 @@ defmodule ActiveMemory.Adapters.MneisaTest do
   alias Test.Support.People.Person
   alias Test.Support.People.Store, as: PeopleStore
   alias Test.Support.Dogs.Dog
+  alias Test.Support.ProcessHelper
 
   setup_all do
+    ProcessHelper.stop(PeopleStore)
     {:ok, pid} = PeopleStore.start_link()
 
     on_exit(fn -> :mnesia.delete_table(Person) end)
-    on_exit(fn -> Process.exit(pid, :kill) end)
+    on_exit(fn -> ProcessHelper.stop(PeopleStore) end)
 
     {:ok, %{pid: pid}}
   end
