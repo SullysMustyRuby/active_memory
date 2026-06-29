@@ -81,7 +81,7 @@ Now you have the default `Store` methods available!
 - `Store.delete_all/0` Delete all records stored
 - `Store.one/1` Get one record matching either an attributes search or `match` query
 - `Store.select/1` Get all records matching either an attributes search or `match` query
-- `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
+- `Store.withdraw/1` Atomically get one record matching either an attributes search or `match` query, delete the record and return it. The find-and-delete is a single atomic operation (`:ets.select_delete/2` for ETS, a `:mnesia.transaction/1` for Mnesia), so under concurrent access exactly one caller receives `{:ok, record}` for a given record and any others receive `{:error, :not_found}`. This makes `withdraw/1` safe for take-once workloads such as one time use tokens.
 - `Store.write/1` Write a record into the memmory table
 
 ## Query interface
@@ -141,7 +141,7 @@ by adding `active_memory` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:active_memory, "~> 0.2.1"}
+    {:active_memory, "~> 0.4.0"}
   ]
 end
 ```
@@ -155,7 +155,7 @@ There are many reasons to be leveraging the power of in memory store and the awe
 Instead of having hard coded secrets and application settings crowding your config files store them in an in memory table. Provide your application a small UI to support the secrets and settings and you can update while the application is running in a matter of seconds.
 
 ### One Time Use Tokens 
-Perfect for short lived tokens such as password reset tokens, 2FA tokens, magic links (password less login) etc. Store the tokens along with any other needed data into an `ActiveMemory.Store` to reduce the burden of your database and provide your users a better experience with faster responses.
+Perfect for short lived tokens such as password reset tokens, 2FA tokens, magic links (password less login) etc. Store the tokens along with any other needed data into an `ActiveMemory.Store` to reduce the burden of your database and provide your users a better experience with faster responses. Use `Store.withdraw/1` to redeem a token: it atomically fetches and deletes the record, so even under concurrent requests a token can only be redeemed once.
 
 ### API Keys for clients
 For applications which have a fixed set of API Keys or a relativly small set of API keys (less than a few thousand). Store the keys along with any relevent information into an `ActiveMemory.Store` to reduce the burden of your database and provide your users a better experience with faster responses.

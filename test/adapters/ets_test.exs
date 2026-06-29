@@ -333,6 +333,25 @@ defmodule ActiveMemory.Adapters.EtsTest do
     end
   end
 
+  describe "withdraw/1 is atomic under concurrency" do
+    test "only one concurrent caller withdraws a given record" do
+      {:ok, _record} = DogStore.write(%Dog{name: "atomic", breed: "TestHound"})
+      query = %{name: "atomic", breed: "TestHound"}
+
+      results =
+        1..20
+        |> Task.async_stream(fn _ -> DogStore.withdraw(query) end,
+          max_concurrency: 20,
+          ordered: false
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
+
+      assert Enum.count(results, &match?({:ok, _}, &1)) == 1
+      assert Enum.count(results, &(&1 == {:error, :not_found})) == 19
+      assert DogStore.one(query) == {:error, :not_found}
+    end
+  end
+
   describe "write/1" do
     test "writes the record with the correct schema" do
       record = %Dog{

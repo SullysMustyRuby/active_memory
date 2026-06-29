@@ -331,6 +331,35 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     end
   end
 
+  describe "withdraw/1 is atomic under concurrency" do
+    setup do
+      on_exit(fn -> :mnesia.clear_table(Person) end)
+
+      :ok
+    end
+
+    test "only one concurrent caller withdraws a given record" do
+      :mnesia.clear_table(Person)
+
+      {:ok, _record} =
+        PeopleStore.write(%Person{first: "atomic", last: "tester", email: "atomic@test.com"})
+
+      query = %{first: "atomic", last: "tester"}
+
+      results =
+        1..20
+        |> Task.async_stream(fn _ -> PeopleStore.withdraw(query) end,
+          max_concurrency: 20,
+          ordered: false
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
+
+      assert Enum.count(results, &match?({:ok, _}, &1)) == 1
+      assert Enum.count(results, &(&1 == {:error, :not_found})) == 19
+      assert PeopleStore.one(query) == {:error, :not_found}
+    end
+  end
+
   describe "write/1" do
     setup do
       on_exit(fn -> :mnesia.clear_table(Person) end)

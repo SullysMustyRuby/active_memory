@@ -6,7 +6,7 @@ defmodule ActiveMemory.MixProject do
   @github "https://github.com/SullysMustyRuby/active_memory"
   @license "MIT"
   @name "ActiveMemory"
-  @version "0.3.3"
+  @version "0.4.0"
 
   def project do
     [
@@ -18,6 +18,12 @@ defmodule ActiveMemory.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
+
+      # Support modules and seed files under test/support are loaded manually by
+      # test/test_helper.exs, so exclude them from the Elixir 1.19+ test file scan.
+      test_ignore_filters: [
+        ~r"^test/support/"
+      ],
 
       # ExDoc
       name: @name,
