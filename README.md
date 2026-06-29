@@ -84,6 +84,11 @@ Now you have the default `Store` methods available!
 - `Store.withdraw/1` Atomically get one record matching either an attributes search or `match` query, delete the record and return it. The find-and-delete is a single atomic operation (`:ets.select_delete/2` for ETS, a `:mnesia.transaction/1` for Mnesia), so under concurrent access exactly one caller receives `{:ok, record}` for a given record and any others receive `{:error, :not_found}`. This makes `withdraw/1` safe for take-once workloads such as one time use tokens.
 - `Store.write/1` Write a record into the memmory table
 
+## Concurrency
+Both a `Store` and an `ActiveRepo` are `GenServer`s, but the data functions (`all`, `one`, `select`, `write`, `delete`, `delete_all`, `withdraw`) are **not** routed through that process and are **not** serialized by it. They are ordinary module functions that run in the **caller's** process and delegate straight to the table's adapter, so reads and writes execute with `:ets`/`:mnesia` concurrency — many processes operate in parallel and the single `GenServer` is **not** a bottleneck. Only lifecycle and metadata operations (`init`, `state`, `reload_seeds`) actually use the `GenServer`.
+
+These functions live on the `GenServer` module purely for **organization**: it is the single place responsible for how the application talks to its table(s), following the Single Responsibility Principle. See the [S.T.O.N.E principles](https://www.hpt-consulting.org/blog/stone-principles) for the broader design philosophy.
+
 ## Query interface
 There are two different query types available to help make finding the records in your store easier. 
 ### The Attribute query syntax
@@ -166,6 +171,38 @@ A few things to be aware of:
 - **Seeds are skipped on recovery.** A recovered table already holds its data, so a configured `seed_file` is not re-run. `before_init` methods, however, always run — see the warning in [Before `init`](#before-init).
 - **Mnesia stores are unaffected.** Mnesia tables are owned by the Mnesia subsystem rather than the `Store` process, so they already survive a `Store` crash; the heir is purely an ETS concern.
 - **Scope is process crashes, not node restarts.** The heir protects against `Store` crashes and supervisor restarts. It does **not** protect against a full node/BEAM restart, which clears all ETS regardless. For data that must survive a restart, use a Mnesia store with `disc_copies`.
+
+## Multiple tables with an ActiveRepo
+A `Store` manages a single `Table`. When you want one supervised entry point over **several** tables, use an `ActiveMemory.ActiveRepo` — the multi-table counterpart to a `Store`. (It is named `ActiveRepo` rather than `Repo` so it does not collide with an application's `Ecto.Repo`.)
+
+```elixir
+defmodule MyApp.ActiveRepo do
+  use ActiveMemory.ActiveRepo,
+    tables: [
+      MyApp.People.Person,
+      {MyApp.Dogs.Dog, seed_file: Path.expand("dog_seeds.exs", __DIR__), before_init: [{:warm, []}]}
+    ]
+end
+```
+
+Add it to your supervision tree like any other process (`children = [MyApp.ActiveRepo]`). Tables may freely mix `:ets` and `:mnesia`; each call dispatches to the adapter configured on the given table.
+
+### ActiveRepo API
+Reads and `withdraw` take the table module as the first argument; writes and deletes infer the table from the struct:
+```elixir
+MyApp.ActiveRepo.write(%Person{...})          # table inferred from the struct
+MyApp.ActiveRepo.withdraw(Dog, query)         # reads take the table explicitly
+MyApp.ActiveRepo.all(Person)
+MyApp.ActiveRepo.one(Dog, %{name: "gem"})
+MyApp.ActiveRepo.select(Person, query)
+MyApp.ActiveRepo.delete(%Dog{} = dog)
+MyApp.ActiveRepo.delete_all(Person)
+```
+- `ActiveRepo.all/1`, `ActiveRepo.delete/1`, `ActiveRepo.delete_all/1`, `ActiveRepo.one/2`, `ActiveRepo.select/2`, `ActiveRepo.withdraw/2`, `ActiveRepo.write/1`
+- An operation for a struct or table that is not part of the `ActiveRepo` returns `{:error, :unknown_table}`.
+
+### Per-table options
+Each `tables:` entry is a table module or a `{table, opts}` tuple. Per-table `seed_file` and `before_init` work exactly as they do for a `Store`; `initial_state` is an `ActiveRepo`-level option (one process, one state). Seeding, the [query interface](#query-interface) and [Resilience](#resilience) all behave the same as for a `Store` — including the [`before_init` recovery caveat](#before-init).
 
 ## Installation
 

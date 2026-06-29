@@ -5,6 +5,17 @@ defmodule ActiveMemory.StoreTest do
   alias Test.Support.Dogs.Store, as: DogStore
   alias Test.Support.People.Person
   alias Test.Support.People.Store, as: PeopleStore
+  alias Test.Support.ProcessHelper
+
+  # The stores are named GenServers; make sure none are lingering from a prior test
+  # (or a prior module) before a test starts a fresh one, otherwise `start_link`
+  # races with the previous instance's shutdown and returns `{:already_started, _}`.
+  setup do
+    ProcessHelper.stop(DogStore)
+    ProcessHelper.stop(PeopleStore)
+
+    :ok
+  end
 
   describe "init with options" do
     test "with a valid seed file populates the store" do

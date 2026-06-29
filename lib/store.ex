@@ -11,6 +11,22 @@ defmodule ActiveMemory.Store do
     - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
     - `Store.write/1` Write a record into the memmory table
 
+  ## Concurrency
+  A `Store` is a `GenServer`, but the data functions above (`all/0`, `one/1`,
+  `select/1`, `write/1`, `delete/1`, `withdraw/1`, `delete_all/0`) are **not**
+  routed through that process and are **not** serialized by it. They are ordinary
+  module functions that run in the **caller's** process, delegating straight to the
+  table's adapter (and therefore to `:ets`/`:mnesia`). Concurrency is governed by
+  ETS/Mnesia themselves, so many processes read and write in parallel — the single
+  `GenServer` is not a bottleneck. Only lifecycle and metadata operations (`init`,
+  `state/0`, `reload_seeds/0`) actually use the `GenServer`.
+
+  These functions live on the `GenServer` module purely for **organization**: the
+  `Store` is the single place responsible for how the application talks to its
+  table, following the Single Responsibility Principle. See the
+  [S.T.O.N.E principles](https://www.hpt-consulting.org/blog/stone-principles) for
+  the broader design philosophy.
+
   ## Seeding
   When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.
   ```elixir
@@ -76,6 +92,8 @@ defmodule ActiveMemory.Store do
 
       use GenServer
 
+      alias ActiveMemory.Operations
+
       opts = unquote(Macro.expand(opts, __CALLER__))
 
       @table Keyword.get(opts, :table)
@@ -91,93 +109,46 @@ defmodule ActiveMemory.Store do
       def init(_) do
         with {:ok, table_status} <- create_table(),
              {:ok, :seed_success} <- __maybe_run_seeds__(table_status),
-             {:ok, _result} <- before_init(@before_init),
+             {:ok, _result} <- Operations.before_init(@before_init, __MODULE__),
              {:ok, initial_state} <- __initial_state__() do
           {:ok, initial_state}
         end
       end
 
       @spec all() :: list(map())
-      def all, do: :erlang.apply(@table.__attributes__(:adapter), :all, [@table])
+      def all, do: Operations.all(@table)
 
-      def create_table do
-        :erlang.apply(@table.__attributes__(:adapter), :create_table, [@table])
-      end
+      def create_table, do: Operations.create_table(@table)
 
       @spec delete(any()) :: :ok | {:error, any()}
-      def delete(%{__struct__: @table} = struct) do
-        :erlang.apply(@table.__attributes__(:adapter), :delete, [struct, @table])
-      end
-
-      def delete(nil), do: :ok
-
-      def delete(_), do: {:error, :bad_schema}
+      def delete(struct), do: Operations.delete(struct, @table)
 
       @spec delete_all() :: :ok | {:error, any()}
-      def delete_all do
-        :erlang.apply(@table.__attributes__(:adapter), :delete_all, [@table])
-      end
+      def delete_all, do: Operations.delete_all(@table)
 
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
-      def one(query) do
-        case :erlang.apply(@table.__attributes__(:adapter), :one, [query, @table]) do
-          {:ok, %{} = record} -> {:ok, record}
-          {:error, message} -> {:error, message}
-        end
-      end
+      def one(query), do: Operations.one(query, @table)
 
       def reload_seeds do
         GenServer.call(__MODULE__, :reload_seeds)
       end
 
       @spec select(map() | list(any())) :: {:ok, list(map())} | {:error, any()}
-      def select(query) when is_map(query) do
-        :erlang.apply(@table.__attributes__(:adapter), :select, [query, @table])
-      end
-
-      def select({_operand, _lhs, _rhs} = query) do
-        :erlang.apply(@table.__attributes__(:adapter), :select, [query, @table])
-      end
-
-      def select(_), do: {:error, :bad_select_query}
+      def select(query), do: Operations.select(query, @table)
 
       def state do
         GenServer.call(__MODULE__, :state)
       end
 
       @spec withdraw(map() | list(any())) :: {:ok, map()} | {:error, any()}
-      def withdraw(query) do
-        :erlang.apply(@table.__attributes__(:adapter), :withdraw, [query, @table])
-      end
+      def withdraw(query), do: Operations.withdraw(query, @table)
 
       @spec write(map()) :: {:ok, map()} | {:error, any()}
-      def write(%@table{} = struct) do
-        case Map.has_key?(struct, :uuid) do
-          true -> write_with_uuid(struct)
-          false -> normal_write(struct)
-        end
-      end
-
-      def write(_), do: {:error, :bad_schema}
-
-      defp write_with_uuid(%@table{} = struct) do
-        case Map.get(struct, :uuid) do
-          nil ->
-            with_uuid = Map.put(struct, :uuid, Ecto.UUID.generate())
-            :erlang.apply(@table.__attributes__(:adapter), :write, [with_uuid, @table])
-
-          uuid when is_binary(uuid) ->
-            :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
-        end
-      end
-
-      def normal_write(%@table{} = struct) do
-        :erlang.apply(@table.__attributes__(:adapter), :write, [struct, @table])
-      end
+      def write(struct), do: Operations.write(struct, @table)
 
       @impl true
       def handle_call(:reload_seeds, _from, state) do
-        {:reply, __run_seeds_file__(), state}
+        {:reply, Operations.seed(@seed_file, @table), state}
       end
 
       @impl true
@@ -193,23 +164,11 @@ defmodule ActiveMemory.Store do
 
       def handle_info(_message, state), do: {:noreply, state}
 
-      defp before_init(:default), do: {:ok, :default}
-
-      defp before_init({method, args}) when is_list(args) do
-        :erlang.apply(__MODULE__, method, args)
-        {:ok, :before_init_success}
-      end
-
-      defp before_init(methods) when is_list(methods) do
-        Enum.each(methods, &before_init(&1))
-        {:ok, :before_init_success}
-      end
-
       # A recovered table already holds its data, so seeding is skipped to avoid
       # duplicating or clobbering the surviving records.
       defp __maybe_run_seeds__(:recovered), do: {:ok, :seed_success}
 
-      defp __maybe_run_seeds__(:created), do: __run_seeds_file__()
+      defp __maybe_run_seeds__(:created), do: Operations.seed(@seed_file, @table)
 
       # Only the clause matching the compile-time option is generated so the
       # Elixir 1.19+ type checker never sees an unreachable clause.
@@ -225,26 +184,6 @@ defmodule ActiveMemory.Store do
         defp __initial_state__ do
           {method, args} = @initial_state
           :erlang.apply(__MODULE__, method, args)
-        end
-      end
-
-      if @seed_file == nil do
-        defp __run_seeds_file__, do: {:ok, :seed_success}
-      else
-        defp __run_seeds_file__ do
-          with {seeds, _} when is_list(seeds) <- Code.eval_file(@seed_file),
-               true <- write_seeds(seeds) do
-            {:ok, :seed_success}
-          else
-            {:error, message} -> {:error, message}
-            _ -> {:error, :seed_failure}
-          end
-        end
-
-        defp write_seeds(seeds) do
-          seeds
-          |> Task.async_stream(&write(&1))
-          |> Enum.all?(fn {:ok, {result, _seed}} -> result == :ok end)
         end
       end
     end
