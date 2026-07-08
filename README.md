@@ -1,12 +1,35 @@
 <h1 style="color: green">ActiveMemory</h1>
 
-## **A Simple ORM for ETS and Mnesia**
+## **The typed, attribute-queryable in-memory store for ETS and Mnesia**
 
 ## Overview 
 
-A package to help bring the power of in memory storage with ETS and Mnesia to your Elixir application. 
+A key/value cache answers one question: *"what is the value for this key?"* ActiveMemory answers the questions a cache cannot:
 
-ActiveMemory provides a simple interface and configuration which abstracts the ETS and Mnesia specifics and provides a common interface called a [`Store`](#store-api) or if you need multiple tables/structs an [`ActiveRepo`](#multiple-tables-with-an-activerepo).
+```elixir
+# every active session for a user
+SessionStore.select(%{user_id: user_id, active?: true})
+
+# admins who have not logged in since the cutoff
+StaffStore.select(match(:role == "admin" and :last_login < cutoff))
+
+# atomically claim a one-time token — exactly one concurrent caller wins
+TokenStore.withdraw(%{value: submitted_token})
+```
+
+Define a `Table` with named attributes and you get typed structs you can query by **any combination of fields** — no cache keys to design, no ETS match specs to hand-write, no database round-trip. The same simple ORM interface runs on ETS or Mnesia, with built-in [record expiry (TTL)](#expiry-ttl), [crash resilience](#resilience), and [atomic take-once reads](#store-api).
+
+ActiveMemory abstracts the ETS and Mnesia specifics behind a common interface called a [`Store`](#store-api), or an [`ActiveRepo`](#multiple-tables-with-an-activerepo) when you need multiple tables.
+
+### When to reach for ActiveMemory
+
+| You need | Reach for |
+|---|---|
+| To cache computed values by key, with eviction policies and hit/miss stats | A cache: [Cachex](https://github.com/whitfin/cachex), [Nebulex](https://github.com/elixir-nebulex/nebulex) |
+| Durable, relational data | A database with [Ecto](https://github.com/elixir-ecto/ecto) |
+| **Structured records in memory, queried by their attributes** | **ActiveMemory** |
+
+The sweet spot is any small-to-medium dataset you would be tempted to put in a database table but want at memory speed: one-time tokens and 2FA codes, sessions, feature flags and config, API keys, reference data. See [Potential Use Cases](#potential-use-cases).
 
 ## Example setup
 1. Define a `Table` with attributes.
@@ -90,19 +113,20 @@ Both a `Store` and an `ActiveRepo` are `GenServer`s, but the data functions (`al
 These functions live on the `GenServer` module purely for **organization**: it is the single place responsible for how the application talks to its table(s), following the Single Responsibility Principle. See the [S.T.O.N.E principles](https://www.hpt-consulting.org/blog/stone-principles) for the broader design philosophy.
 
 ## Query interface
-There are two different query types available to help make finding the records in your store easier. 
+This is where ActiveMemory earns its keep: records are found by their **attributes**, not by a key you had to design up front. Any field — or any combination of fields — is queryable. There are two query styles.
 ### The Attribute query syntax
-Attribute matching allows you to provide a map of attributes to search by.
+Attribute matching allows you to provide a map of any subset of the table's fields to search by.
 ```elixir
 Store.one(%{uuid: "a users uuid"})
 Store.select(%{department: "accounting", admin?: false, active: true})
 ```
 ### The `match` query syntax
-Using the `match` macro you can structure a basic query.  
+When equality isn't enough, the `match` macro adds comparisons and boolean logic.
 ```elixir
 query = match(:department == "sales" or :department == "marketing" and :start_date > last_month)
 Store.select(query)
 ```
+Expressing either of these with a key/value cache would mean maintaining your own secondary indexes by hand; here the table's schema makes every field queryable for free.
 ## Seeding
 When starting a `Store` there is an option to provide a valid seed file and have the `Store` auto load seeds contained in the file.
 ```elixir
@@ -243,7 +267,7 @@ by adding `active_memory` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:active_memory, "~> 0.4.0"}
+    {:active_memory, "~> 0.7.0"}
   ]
 end
 ```

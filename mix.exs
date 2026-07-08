@@ -49,7 +49,8 @@ defmodule ActiveMemory.MixProject do
   end
 
   defp description do
-    "A Simple ORM for ETS and Mnesia"
+    "The typed, attribute-queryable in-memory store for ETS and Mnesia. " <>
+      "A simple ORM with record expiry (TTL), crash resilience, and atomic take-once reads."
   end
 
   # Run "mix help deps" to learn about dependencies.
