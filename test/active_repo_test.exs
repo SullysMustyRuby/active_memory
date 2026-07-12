@@ -203,10 +203,15 @@ defmodule ActiveMemory.ActiveRepoTest do
       {:ok, _record} = MultiRepo.write(%Widget{name: "x", color: "blue"})
       {:ok, _record} = MultiRepo.write(%Gadget{name: "y", category: "z"})
 
-      MultiRepo.delete_all(Widget)
+      assert MultiRepo.delete_all(Widget) == :ok
 
       assert MultiRepo.all(Widget) == []
       assert length(MultiRepo.all(Gadget)) == 1
+    end
+
+    test "delete_all returns :ok for both ets and mnesia tables" do
+      assert MultiRepo.delete_all(Widget) == :ok
+      assert MultiRepo.delete_all(Gadget) == :ok
     end
   end
 

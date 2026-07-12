@@ -71,7 +71,7 @@ defmodule ActiveMemory.StoreTest do
     test "repopulates the store from the seed file" do
       {:ok, pid} = PeopleStore.start_link()
 
-      PeopleStore.delete_all()
+      assert PeopleStore.delete_all() == :ok
       assert PeopleStore.all() == []
 
       assert PeopleStore.reload_seeds() == {:ok, :seed_success}

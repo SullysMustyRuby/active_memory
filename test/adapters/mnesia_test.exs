@@ -78,6 +78,24 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     end
   end
 
+  describe "delete_all/0" do
+    setup do
+      write_seeds()
+
+      on_exit(fn -> :mnesia.clear_table(Person) end)
+
+      :ok
+    end
+
+    test "returns :ok and deletes all items" do
+      people = PeopleStore.all()
+
+      assert length(people) == 10
+      assert PeopleStore.delete_all() == :ok
+      assert PeopleStore.all() == []
+    end
+  end
+
   describe "one/1 with a map query" do
     setup do
       write_seeds()
