@@ -94,12 +94,15 @@ defmodule ActiveMemory.Adapters.Mnesia do
   Delete all structs from a table.
   ```elixir
     iex:> PeopleStore.delete_all(Person)
-    true
+    :ok
   ```
   """
-  @spec delete_all(atom()) :: true | any()
+  @spec delete_all(atom()) :: :ok | {:error, any()}
   def delete_all(table) do
-    :mnesia.clear_table(table)
+    case :mnesia.clear_table(table) do
+      {:atomic, :ok} -> :ok
+      {:aborted, message} -> {:error, message}
+    end
   end
 
   @doc """

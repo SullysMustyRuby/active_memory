@@ -74,12 +74,13 @@ defmodule ActiveMemory.Adapters.Ets do
   Delete all structs from a table.
   ```elixir
     iex:> PeopleStore.delete_all(Person)
-    true
+    :ok
   ```
   """
-  @spec delete_all(atom()) :: true | any()
+  @spec delete_all(atom()) :: :ok
   def delete_all(table) do
-    :ets.delete_all_objects(table)
+    true = :ets.delete_all_objects(table)
+    :ok
   end
 
   @doc """

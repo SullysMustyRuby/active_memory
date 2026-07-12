@@ -83,12 +83,13 @@ defmodule ActiveMemory.Adapters.EtsTest do
   end
 
   describe "delete_all/1" do
-    test "with a valid table with items will delete all items" do
+    test "with a valid table with items returns :ok and deletes all items" do
       write_seeds()
       dogs = DogStore.all()
 
       assert length(dogs) == 10
-      assert DogStore.delete_all()
+      assert DogStore.delete_all() == :ok
+      assert DogStore.all() == []
     end
   end
 
