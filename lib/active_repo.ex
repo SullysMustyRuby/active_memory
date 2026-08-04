@@ -99,6 +99,7 @@ defmodule ActiveMemory.ActiveRepo do
                      table -> {table, []}
                    end)
       @tables Enum.map(@repo_tables, fn {table, _opts} -> table end)
+      @ttl_tables Enum.filter(@tables, fn table -> table.__attributes__(:ttl) end)
       @initial_state Keyword.get(opts, :initial_state, :default)
       @sweep_interval Keyword.get(opts, :sweep_interval, unquote(@default_sweep_interval))
 
@@ -184,12 +185,7 @@ defmodule ActiveMemory.ActiveRepo do
       def handle_info(:sweep, state) do
         now = System.system_time(:millisecond)
 
-        Enum.each(@repo_tables, fn {table, _opts} ->
-          case table.__attributes__(:ttl) do
-            nil -> :ok
-            _ttl -> Operations.delete_expired(table, now)
-          end
-        end)
+        Enum.each(@ttl_tables, fn table -> Operations.delete_expired(table, now) end)
 
         __schedule_sweep__()
         {:noreply, state}
@@ -219,10 +215,13 @@ defmodule ActiveMemory.ActiveRepo do
       defp __maybe_seed__(:created, seed_file, table), do: Operations.seed(seed_file, table)
 
       # Schedules the next expiry sweep only when at least one table uses a `ttl`.
-      defp __schedule_sweep__ do
-        case Enum.any?(@tables, fn table -> table.__attributes__(:ttl) end) do
-          true -> Process.send_after(self(), :sweep, @sweep_interval)
-          false -> :ok
+      # Only the clause matching the compile-time table configuration is generated
+      # so the Elixir 1.19+ type checker never sees an unreachable clause.
+      if @ttl_tables == [] do
+        defp __schedule_sweep__, do: :ok
+      else
+        defp __schedule_sweep__ do
+          Process.send_after(self(), :sweep, @sweep_interval)
         end
       end
 
