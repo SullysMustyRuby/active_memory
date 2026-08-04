@@ -133,22 +133,19 @@ defmodule ActiveMemory.Adapters.Ets do
   """
   @spec select(map() | tuple(), atom()) :: {:ok, list(map())} | {:error, any()}
   def select(query_map, table) when is_map(query_map) do
-    with {:ok, query} <- MatchGuards.build(table, query_map),
-         records when is_list(records) <- match_query(query, table) do
-      {:ok, to_struct(records, table)}
-    else
-      [] -> {:ok, []}
-      {:error, message} -> {:error, message}
+    case MatchGuards.build(table, query_map) do
+      {:ok, query} ->
+        records = match_query(query, table)
+        {:ok, to_struct(records, table)}
+
+      {:error, message} ->
+        {:error, message}
     end
   end
 
   def select(query, table) when is_tuple(query) do
-    with records when is_list(records) <- select_query(query, table) do
-      {:ok, to_struct(records, table)}
-    else
-      [] -> {:ok, []}
-      {:error, message} -> {:error, message}
-    end
+    records = select_query(query, table)
+    {:ok, to_struct(records, table)}
   end
 
   @doc """
