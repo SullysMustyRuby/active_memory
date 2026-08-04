@@ -40,6 +40,66 @@ defmodule ActiveMemory.Table do
   end
   ```
 
+  ## Field types and Ecto Changesets
+  Fields accept an optional [Ecto type](https://hexdocs.pm/ecto/Ecto.Schema.html#module-types-and-casting)
+  as the second argument (defaulting to `:any` when omitted):
+
+  ```elixir
+  defmodule MyApp.Planet do
+    use ActiveMemory.Table, type: :ets
+
+    attributes auto_generate_uuid: true do
+      field :name, :string
+      field :gravity, :float
+      field :moons, :integer, default: 0
+    end
+  end
+  ```
+
+  Types are not enforced on `write/1` — ETS and Mnesia store any term — they exist
+  to power `Ecto.Changeset` casting and validation, which works directly on the
+  table struct:
+
+  ```elixir
+  {:ok, planet} =
+    %MyApp.Planet{}
+    |> Ecto.Changeset.cast(params, [:name, :gravity, :moons])
+    |> Ecto.Changeset.validate_required([:name])
+    |> Ecto.Changeset.apply_action(:insert)
+
+  {:ok, planet} = MyApp.Planet.Store.write(planet)
+  ```
+
+  The declared types are available as `__attributes__(:types)`.
+
+  ## Using an Ecto schema instead of attributes
+  A table can skip the `attributes` block entirely and define an Ecto
+  `embedded_schema`. All table metadata is derived from the schema, and the module
+  is a real Ecto schema, so every changeset function works out of the box:
+
+  ```elixir
+  defmodule MyApp.Comet do
+    use ActiveMemory.Table, type: :ets
+
+    use Ecto.Schema
+
+    embedded_schema do
+      field :name, :string
+      field :orbit_years, :integer
+    end
+  end
+  ```
+
+  Notes for Ecto schema tables:
+  - The default `embedded_schema` primary key (`{:id, :binary_id, autogenerate: true}`)
+    is honored: `write/1` generates a uuid for a `nil` `id`, just like
+    `auto_generate_uuid` does for `attributes` tables. With `@primary_key false`
+    the first declared field is the table key and no value is generated.
+  - Virtual fields are never stored; they reset to their defaults on read.
+  - `timestamps()` fields are stored but not managed — nothing sets them on write.
+  - A table with a `ttl` must declare its own expiry field:
+    `field :expires_at, :integer` (milliseconds since epoch, stamped on write).
+
   ## Options when creating tables
   `ActiveMemory.Table` support almost all of the same options as `:ets` and `:mneisia`. 
   Please be aware that the options are different for `:ets` and `:mneisia`. 
@@ -152,9 +212,12 @@ defmodule ActiveMemory.Table do
     quote do
       import ActiveMemory.Table, only: [attributes: 1, attributes: 2]
 
+      @before_compile ActiveMemory.Table
+
       Module.register_attribute(__MODULE__, :active_memory_fields, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_query_fields, accumulate: true)
       Module.register_attribute(__MODULE__, :active_memory_field_sources, accumulate: true)
+      Module.register_attribute(__MODULE__, :active_memory_types, accumulate: true)
 
       opts = unquote(Macro.expand(opts, __CALLER__))
 
@@ -178,11 +241,12 @@ defmodule ActiveMemory.Table do
     define_attributes(opts, block)
   end
 
-  defmacro field(name, opts \\ []) do
+  defmacro field(name, type \\ :any, opts \\ []) do
     quote do
       ActiveMemory.Table.__field__(
         __MODULE__,
         unquote(name),
+        unquote(type),
         unquote(opts)
       )
     end
@@ -191,6 +255,23 @@ defmodule ActiveMemory.Table do
   @doc false
   def __after_compile__(%{module: _module}, _) do
     :ok
+  end
+
+  @doc false
+  defmacro __before_compile__(env) do
+    cond do
+      Module.defines?(env.module, {:__attributes__, 1}) ->
+        :ok
+
+      Module.defines?(env.module, {:__schema__, 1}) ->
+        define_ecto_schema_attributes(env.module)
+
+      true ->
+        raise ArgumentError,
+              "#{inspect(env.module)} uses ActiveMemory.Table but defines no fields. " <>
+                "Define them with an `attributes do ... end` block or with an Ecto schema " <>
+                "(`embedded_schema do ... end`)."
+    end
   end
 
   @doc false
@@ -231,16 +312,79 @@ defmodule ActiveMemory.Table do
   end
 
   @doc false
-  def __field__(mod, name, opts) do
-    define_field(mod, name, opts)
+  def __auto_uuid_field__({field, _source, type}) when type in [:binary_id, Ecto.UUID],
+    do: field
+
+  def __auto_uuid_field__(_other), do: nil
+
+  @doc false
+  def __field__(mod, name, type, opts) do
+    {type, opts} = normalize_field_args(type, opts)
+
+    validate_type!(name, type)
+
+    define_field(mod, name, type, opts)
   end
 
-  defp define_field(mod, name, opts) do
+  defp define_field(mod, name, type, opts) do
     put_struct_field(mod, name, Keyword.get(opts, :default))
+
+    Module.put_attribute(mod, :active_memory_types, {name, type})
 
     Module.put_attribute(mod, :active_memory_query_fields, name)
 
     Module.put_attribute(mod, :active_memory_fields, name)
+  end
+
+  # `field :name, default: "x"` predates types: a keyword list in the type
+  # position is the options list of an untyped field.
+  defp normalize_field_args(opts, []) when is_list(opts), do: {:any, opts}
+
+  defp normalize_field_args(type, opts), do: {type, opts}
+
+  defp validate_type!(name, type) when not is_atom(type) and not is_tuple(type) do
+    raise ArgumentError,
+          "invalid type #{inspect(type)} for field #{inspect(name)}. " <>
+            "Use an Ecto type such as :string, :integer, {:array, :string} or a custom type module."
+  end
+
+  defp validate_type!(_name, _type), do: :ok
+
+  defp define_ecto_schema_attributes(module) do
+    adapter = Module.get_attribute(module, :adapter)
+    table_options = Module.get_attribute(module, :table_options)
+    ttl = Module.get_attribute(module, :ttl)
+
+    quote do
+      def __attributes__(:adapter), do: unquote(adapter)
+
+      def __attributes__(:auto_generate_uuid), do: false
+
+      # Mirrors `auto_generate_uuid` for Ecto schema tables: an autogenerated
+      # `binary_id`/`Ecto.UUID` primary key is populated with a uuid on write.
+      def __attributes__(:auto_uuid_field),
+        do: ActiveMemory.Table.__auto_uuid_field__(__schema__(:autogenerate_id))
+
+      def __attributes__(:match_head) do
+        ActiveMemory.Adapters.Helpers.build_match_head(
+          __attributes__(:query_map),
+          __MODULE__,
+          unquote(adapter)
+        )
+      end
+
+      def __attributes__(:query_fields), do: __schema__(:fields)
+
+      def __attributes__(:query_map),
+        do: ActiveMemory.Adapters.Helpers.build_query_map(__schema__(:fields))
+
+      def __attributes__(:table_options), do: unquote(Macro.escape(table_options))
+
+      def __attributes__(:ttl), do: unquote(ttl)
+
+      def __attributes__(:types),
+        do: Map.new(__schema__(:fields), fn field -> {field, __schema__(:type, field)} end)
+    end
   end
 
   defp define_attributes(options, block) do
@@ -260,6 +404,7 @@ defmodule ActiveMemory.Table do
           ActiveMemory.Table.__field__(
             __MODULE__,
             :uuid,
+            Ecto.UUID,
             primary_key: true,
             autogenerate: true
           )
@@ -275,7 +420,7 @@ defmodule ActiveMemory.Table do
         # When a `ttl` is configured the `expires_at` field is appended last so it
         # never displaces the table key (the first query field, or the uuid).
         if Module.get_attribute(__MODULE__, :ttl) do
-          ActiveMemory.Table.__field__(__MODULE__, :expires_at, [])
+          ActiveMemory.Table.__field__(__MODULE__, :expires_at, :integer, [])
         end
       end
 
@@ -286,12 +431,16 @@ defmodule ActiveMemory.Table do
         field_sources = @active_memory_field_sources |> Enum.reverse()
         query_fields = Enum.map(active_memory_query_fields, & &1)
         query_map = Helpers.build_query_map(query_fields)
+        types = Map.new(@active_memory_types)
+        auto_uuid_field = if Enum.member?(fields, :uuid), do: :uuid
 
         defstruct Enum.reverse(@active_memory_struct_fields)
 
         def __attributes__(:adapter), do: unquote(Macro.escape(@adapter))
 
         def __attributes__(:auto_generate_uuid), do: unquote(Macro.escape(@auto_generate_uuid))
+
+        def __attributes__(:auto_uuid_field), do: unquote(auto_uuid_field)
 
         def __attributes__(:match_head),
           do:
@@ -308,6 +457,13 @@ defmodule ActiveMemory.Table do
         def __attributes__(:table_options), do: unquote(Macro.escape(@table_options))
 
         def __attributes__(:ttl), do: unquote(Macro.escape(@ttl))
+
+        def __attributes__(:types), do: unquote(Macro.escape(types))
+
+        # The reflection `Ecto.Changeset.cast/4` looks up when given a struct,
+        # so table structs can be cast and validated like any Ecto schema.
+        @doc false
+        def __changeset__, do: unquote(Macro.escape(types))
 
         for clauses <-
               ActiveMemory.Table.__attributes__(
