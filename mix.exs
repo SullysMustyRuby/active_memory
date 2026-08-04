@@ -14,7 +14,7 @@ defmodule ActiveMemory.MixProject do
       version: @version,
       author: @author,
       description: description(),
-      elixir: "~> 1.13",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
