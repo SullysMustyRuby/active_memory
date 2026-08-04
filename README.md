@@ -116,9 +116,17 @@ end
   %MyApp.Planet{}
   |> Ecto.Changeset.cast(params, [:name, :gravity, :moons])
   |> Ecto.Changeset.validate_required([:name])
-  |> Ecto.Changeset.apply_action(:insert)
+  |> MyApp.Planet.Store.write()
+```
 
-{:ok, planet} = MyApp.Planet.Store.write(planet)
+`write/1` accepts a changeset directly, the way `Ecto.Repo.insert/1` does — no `Ecto.Changeset.apply_changes/1` step of your own. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, so a Phoenix form renders the errors:
+
+```elixir
+def create_planet(attrs) do
+  %MyApp.Planet{}
+  |> MyApp.Planet.changeset(attrs)
+  |> MyApp.Planet.Store.write()
+end
 ```
 
 ## Using an Ecto schema as a Table
@@ -148,7 +156,7 @@ With `@primary_key false` the first declared field becomes the table key. Virtua
 - `Store.one/1` Get one record matching either an attributes search or `match` query
 - `Store.select/1` Get all records matching either an attributes search or `match` query
 - `Store.withdraw/1` Atomically get one record matching either an attributes search or `match` query, delete the record and return it. The find-and-delete is a single atomic operation (`:ets.select_delete/2` for ETS, a `:mnesia.transaction/1` for Mnesia), so under concurrent access exactly one caller receives `{:ok, record}` for a given record and any others receive `{:error, :not_found}`. This makes `withdraw/1` safe for take-once workloads such as one time use tokens.
-- `Store.write/1` Write a record into the memmory table
+- `Store.write/1` Write a record into the memmory table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `Ecto.Repo.insert/1`
 
 ## Concurrency
 Both a `Store` and an `ActiveRepo` are `GenServer`s, but the data functions (`all`, `one`, `select`, `write`, `delete`, `delete_all`, `withdraw`) are **not** routed through that process and are **not** serialized by it. They are ordinary module functions that run in the **caller's** process and delegate straight to the table's adapter, so reads and writes execute with `:ets`/`:mnesia` concurrency — many processes operate in parallel and the single `GenServer` is **not** a bottleneck. Only lifecycle and metadata operations (`init`, `state`, `reload_seeds`) actually use the `GenServer`.

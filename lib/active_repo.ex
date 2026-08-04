@@ -36,7 +36,7 @@ defmodule ActiveMemory.ActiveRepo do
     - `ActiveRepo.one/2` Get one record from a table matching an attributes search or `match` query
     - `ActiveRepo.select/2` Get all records from a table matching an attributes search or `match` query
     - `ActiveRepo.withdraw/2` Get, delete and return one record from a table
-    - `ActiveRepo.write/1` Write a record into its table
+    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`
 
   An operation for a struct or table that is not part of the `ActiveRepo` returns
   `{:error, :unknown_table}`.
@@ -157,7 +157,13 @@ defmodule ActiveMemory.ActiveRepo do
 
       def withdraw(_table, _query), do: {:error, :unknown_table}
 
-      @spec write(map()) :: {:ok, map()} | {:error, any()}
+      @spec write(map() | Ecto.Changeset.t()) ::
+              {:ok, map()} | {:error, Ecto.Changeset.t() | any()}
+      def write(%Ecto.Changeset{data: %{__struct__: table}} = changeset)
+          when table in @tables do
+        Operations.write(changeset, table)
+      end
+
       def write(%{__struct__: table} = struct) when table in @tables do
         Operations.write(struct, table)
       end

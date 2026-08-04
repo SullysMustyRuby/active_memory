@@ -58,17 +58,19 @@ defmodule ActiveMemory.Table do
 
   Types are not enforced on `write/1` — ETS and Mnesia store any term — they exist
   to power `Ecto.Changeset` casting and validation, which works directly on the
-  table struct:
+  table struct. `write/1` accepts the changeset itself, the way
+  `Ecto.Repo.insert/1` does:
 
   ```elixir
   {:ok, planet} =
     %MyApp.Planet{}
     |> Ecto.Changeset.cast(params, [:name, :gravity, :moons])
     |> Ecto.Changeset.validate_required([:name])
-    |> Ecto.Changeset.apply_action(:insert)
-
-  {:ok, planet} = MyApp.Planet.Store.write(planet)
+    |> MyApp.Planet.Store.write()
   ```
+
+  An invalid changeset returns `{:error, changeset}` with its `action` set to
+  `:insert`, so a Phoenix form renders the errors without any extra work.
 
   The declared types are available as `__attributes__(:types)`.
 

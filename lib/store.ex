@@ -9,7 +9,7 @@ defmodule ActiveMemory.Store do
     - `Store.one/1` Get one record matching either an attributes search or `match` query
     - `Store.select/1` Get all records matching either an attributes search or `match` query
     - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
-    - `Store.write/1` Write a record into the memmory table
+    - `Store.write/1` Write a record into the memmory table, from a struct or an `Ecto.Changeset`
 
   ## Concurrency
   A `Store` is a `GenServer`, but the data functions above (`all/0`, `one/1`,
@@ -162,8 +162,9 @@ defmodule ActiveMemory.Store do
       @spec withdraw(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def withdraw(query), do: Operations.withdraw(query, @table)
 
-      @spec write(map()) :: {:ok, map()} | {:error, any()}
-      def write(struct), do: Operations.write(struct, @table)
+      @spec write(map() | Ecto.Changeset.t()) ::
+              {:ok, map()} | {:error, Ecto.Changeset.t() | any()}
+      def write(struct_or_changeset), do: Operations.write(struct_or_changeset, @table)
 
       @impl true
       def handle_call(:reload_seeds, _from, state) do
