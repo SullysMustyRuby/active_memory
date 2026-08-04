@@ -99,7 +99,6 @@ defmodule ActiveMemory.ActiveRepo do
                      table -> {table, []}
                    end)
       @tables Enum.map(@repo_tables, fn {table, _opts} -> table end)
-      @ttl_tables Enum.filter(@tables, fn table -> table.__attributes__(:ttl) end)
       @initial_state Keyword.get(opts, :initial_state, :default)
       @sweep_interval Keyword.get(opts, :sweep_interval, unquote(@default_sweep_interval))
 
@@ -183,9 +182,7 @@ defmodule ActiveMemory.ActiveRepo do
 
       # Periodically reclaims memory from expired records across every `ttl` table.
       def handle_info(:sweep, state) do
-        now = System.system_time(:millisecond)
-
-        Enum.each(@ttl_tables, fn table -> Operations.delete_expired(table, now) end)
+        Operations.sweep_expired(@tables, System.system_time(:millisecond))
 
         __schedule_sweep__()
         {:noreply, state}
@@ -215,15 +212,10 @@ defmodule ActiveMemory.ActiveRepo do
       defp __maybe_seed__(:created, seed_file, table), do: Operations.seed(seed_file, table)
 
       # Schedules the next expiry sweep only when at least one table uses a `ttl`.
-      # Only the clause matching the compile-time table configuration is generated
-      # so the Elixir 1.19+ type checker never sees an unreachable clause.
-      if @ttl_tables == [] do
-        defp __schedule_sweep__, do: :ok
-      else
-        defp __schedule_sweep__ do
-          Process.send_after(self(), :sweep, @sweep_interval)
-        end
-      end
+      # The `ttl`s are read at runtime by `Operations`, never here: inspecting the
+      # table modules while this one compiles would make them compile time
+      # dependencies, which breaks tooling that loads this file on its own.
+      defp __schedule_sweep__, do: Operations.schedule_sweep(@tables, @sweep_interval)
 
       defp __seed_file__(table) do
         {_table, table_opts} = List.keyfind(@repo_tables, table, 0)
