@@ -197,15 +197,10 @@ defmodule ActiveMemory.Store do
       defp __maybe_run_seeds__(:created), do: Operations.seed(@seed_file, @table)
 
       # Schedules the next expiry sweep only when the table actually uses a `ttl`.
-      # Only the clause matching the table's compile-time `ttl` is generated so the
-      # Elixir 1.19+ type checker never sees an unreachable clause.
-      if @table.__attributes__(:ttl) do
-        defp __schedule_sweep__ do
-          Process.send_after(self(), :sweep, @sweep_interval)
-        end
-      else
-        defp __schedule_sweep__, do: :ok
-      end
+      # The `ttl` is read at runtime by `Operations`, never here: inspecting the
+      # table module while this one compiles would make the table a compile time
+      # dependency, which breaks tooling that loads this file on its own.
+      defp __schedule_sweep__, do: Operations.schedule_sweep(@table, @sweep_interval)
 
       # Only the clause matching the compile-time option is generated so the
       # Elixir 1.19+ type checker never sees an unreachable clause.

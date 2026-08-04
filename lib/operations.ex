@@ -99,6 +99,43 @@ defmodule ActiveMemory.Operations do
   end
 
   @doc """
+  Schedule the calling process's next expiry sweep when any of `tables` uses a
+  `ttl`, and do nothing when none of them do.
+
+  The `ttl` lookup happens here, at runtime, rather than while a `Store` or
+  `ActiveRepo` compiles. Reading it at compile time would make every table a
+  compile time dependency of its store, which breaks tooling that compiles the
+  store's file without the table module loaded.
+  """
+  @spec schedule_sweep(atom() | list(atom()), integer()) :: :ok
+  def schedule_sweep(table, interval) when is_atom(table),
+    do: schedule_sweep([table], interval)
+
+  def schedule_sweep(tables, interval) when is_list(tables) do
+    case Enum.any?(tables, &ttl?/1) do
+      true ->
+        Process.send_after(self(), :sweep, interval)
+        :ok
+
+      false ->
+        :ok
+    end
+  end
+
+  @doc """
+  Delete every expired record from each of `tables` that uses a `ttl`.
+
+  Tables without a `ttl` are skipped, so a repo holding a mix of both only pays
+  for the ones that expire.
+  """
+  @spec sweep_expired(list(atom()), integer()) :: :ok
+  def sweep_expired(tables, now) do
+    tables
+    |> Enum.filter(&ttl?/1)
+    |> Enum.each(&delete_expired(&1, now))
+  end
+
+  @doc """
   Get all records matching an attributes map or a `match` query.
 
   Returns `{:error, :bad_select_query}` for any other query shape.
@@ -182,6 +219,8 @@ defmodule ActiveMemory.Operations do
       _ttl -> Enum.reject(records, &expired?(&1, table))
     end
   end
+
+  defp ttl?(table), do: not is_nil(table.__attributes__(:ttl))
 
   defp reject_if_expired(record, table) do
     case expired?(record, table) do
