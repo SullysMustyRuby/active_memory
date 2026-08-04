@@ -4,12 +4,35 @@ defmodule ActiveMemory.Store do
 
   ## Store API
     - `Store.all/0` Get all records stored
-    - `Store.delete/1` Delete the record provided
+    - `Store.delete/1` Delete the record provided, matched in full (see [Deleting a record](#module-deleting-a-record))
     - `Store.delete_all/0` Delete all records stored
     - `Store.one/1` Get one record matching either an attributes search or `match` query
     - `Store.select/1` Get all records matching either an attributes search or `match` query
     - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
     - `Store.write/1` Write a record into the memmory table, from a struct or an `Ecto.Changeset`
+
+  ## Deleting a record
+  `delete/1` removes an **exact** record match: the struct you pass is compared
+  field for field against what is stored (`:ets.delete_object/2`,
+  `:mnesia.delete_object/3`). Pass a struct that has diverged from the stored copy
+  — a stale read, or one you modified in memory — and nothing is removed, yet the
+  call still returns `:ok`, the same answer `delete/1` gives for a record that was
+  never there.
+
+  This is deliberate. It is the only correct behavior for a `:bag` table, where
+  several records share a key, and on a `:set` table it means a delete never
+  clobbers a newer version of a record written since you read it.
+
+  When you hold an identifier rather than a record you know is current, reach for
+  `withdraw/1` instead. It matches on a query, so staleness cannot affect it, it is
+  atomic, and it tells you whether anything was actually removed:
+
+  ```elixir
+  case MyApp.People.Store.withdraw(%{uuid: uuid}) do
+    {:ok, person} -> # removed, and here is the record that was stored
+    {:error, :not_found} -> # nothing matched
+  end
+  ```
 
   ## Concurrency
   A `Store` is a `GenServer`, but the data functions above (`all/0`, `one/1`,

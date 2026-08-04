@@ -41,6 +41,12 @@ defmodule ActiveMemory.Operations do
   @doc """
   Delete the record provided.
 
+  The record is matched in full by the adapter (`:ets.delete_object/2`,
+  `:mnesia.delete_object/3`), so a struct that has diverged from the stored copy
+  removes nothing and still returns `:ok` — deleting is idempotent and never
+  reports whether a record was present. `withdraw/2` is the query based,
+  atomic alternative that returns `{:error, :not_found}` when nothing matched.
+
   Returns `:ok` for a struct matching `table` or for `nil`, and
   `{:error, :bad_schema}` when the struct does not match `table`.
   """

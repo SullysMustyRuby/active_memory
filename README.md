@@ -151,12 +151,30 @@ With `@primary_key false` the first declared field becomes the table key. Virtua
 
 ## Store API
 - `Store.all/0` Get all records stored
-- `Store.delete/1` Delete the record provided
+- `Store.delete/1` Delete the record provided, matched in full — see [Deleting a record](#deleting-a-record)
 - `Store.delete_all/0` Delete all records stored
 - `Store.one/1` Get one record matching either an attributes search or `match` query
 - `Store.select/1` Get all records matching either an attributes search or `match` query
 - `Store.withdraw/1` Atomically get one record matching either an attributes search or `match` query, delete the record and return it. The find-and-delete is a single atomic operation (`:ets.select_delete/2` for ETS, a `:mnesia.transaction/1` for Mnesia), so under concurrent access exactly one caller receives `{:ok, record}` for a given record and any others receive `{:error, :not_found}`. This makes `withdraw/1` safe for take-once workloads such as one time use tokens.
 - `Store.write/1` Write a record into the memmory table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `Ecto.Repo.insert/1`
+
+## Deleting a record
+`delete/1` removes an **exact** record match: the struct you pass is compared field for field against what is stored (`:ets.delete_object/2`, `:mnesia.delete_object/3`).
+
+> **⚠️ A stale struct deletes nothing, and still returns `:ok`**
+>
+> Pass a struct that has diverged from the stored copy — a stale read, or one you modified in memory — and no record is removed, yet the call returns `:ok`: the same answer `delete/1` gives for a record that was never there. Deleting is idempotent and never reports whether a record was present.
+>
+> This is deliberate. Full record matching is the only correct behavior for a `:bag` table, where several records share a key, and on a `:set` table it means a delete never clobbers a newer version of a record written since you read it.
+>
+> When you hold an identifier rather than a record you know is current, use `withdraw/1`. It matches on a query, so staleness cannot affect it, it is atomic, and it reports what happened:
+>
+> ```elixir
+> case MyApp.People.Store.withdraw(%{uuid: uuid}) do
+>   {:ok, person} -> # removed, and here is the record that was stored
+>   {:error, :not_found} -> # nothing matched
+> end
+> ```
 
 ## Concurrency
 Both a `Store` and an `ActiveRepo` are `GenServer`s, but the data functions (`all`, `one`, `select`, `write`, `delete`, `delete_all`, `withdraw`) are **not** routed through that process and are **not** serialized by it. They are ordinary module functions that run in the **caller's** process and delegate straight to the table's adapter, so reads and writes execute with `:ets`/`:mnesia` concurrency — many processes operate in parallel and the single `GenServer` is **not** a bottleneck. Only lifecycle and metadata operations (`init`, `state`, `reload_seeds`) actually use the `GenServer`.
