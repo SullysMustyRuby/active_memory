@@ -8,8 +8,8 @@ defmodule ActiveMemory.Store do
     - `Store.delete_all/0` Delete all records stored
     - `Store.one/1` Get one record matching either an attributes search or `match` query
     - `Store.select/1` Get all records matching either an attributes search or `match` query
-    - `Store.withdraw/1` Get one record matching either an attributes search or `match` query, delete the record and return it
-    - `Store.write/1` Write a record into the memmory table, from a struct or an `Ecto.Changeset`
+    - `Store.withdraw/1` **Atomically** get one record matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
+    - `Store.write/1` Write a record into the memory table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
 
   ## Deleting a record
   `delete/1` removes an **exact** record match: the struct you pass is compared

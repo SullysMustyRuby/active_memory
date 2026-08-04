@@ -119,7 +119,7 @@ end
   |> MyApp.Planet.Store.write()
 ```
 
-`write/1` accepts a changeset directly, the way `Ecto.Repo.insert/1` does — no `Ecto.Changeset.apply_changes/1` step of your own. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, so a Phoenix form renders the errors:
+`write/1` accepts a changeset directly, the way `Ecto.Repo.insert/1` does — no `Ecto.Changeset.apply_changes/1` step of your own. This works the same on a `Store` and on an [`ActiveRepo`](#activerepo-api), which infers the table from the changeset's data. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, so a Phoenix form renders the errors:
 
 ```elixir
 def create_planet(attrs) do
@@ -156,10 +156,10 @@ With `@primary_key false` the first declared field becomes the table key. Virtua
 - `Store.one/1` Get one record matching either an attributes search or `match` query
 - `Store.select/1` Get all records matching either an attributes search or `match` query
 - `Store.withdraw/1` Atomically get one record matching either an attributes search or `match` query, delete the record and return it. The find-and-delete is a single atomic operation (`:ets.select_delete/2` for ETS, a `:mnesia.transaction/1` for Mnesia), so under concurrent access exactly one caller receives `{:ok, record}` for a given record and any others receive `{:error, :not_found}`. This makes `withdraw/1` safe for take-once workloads such as one time use tokens.
-- `Store.write/1` Write a record into the memmory table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `Ecto.Repo.insert/1`
+- `Store.write/1` Write a record into the memory table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `Ecto.Repo.insert/1`
 
 ## Deleting a record
-`delete/1` removes an **exact** record match: the struct you pass is compared field for field against what is stored (`:ets.delete_object/2`, `:mnesia.delete_object/3`).
+`delete/1` — on a `Store` or an [`ActiveRepo`](#activerepo-api) — removes an **exact** record match: the struct you pass is compared field for field against what is stored (`:ets.delete_object/2`, `:mnesia.delete_object/3`).
 
 > **⚠️ A stale struct deletes nothing, and still returns `:ok`**
 >
@@ -167,7 +167,7 @@ With `@primary_key false` the first declared field becomes the table key. Virtua
 >
 > This is deliberate. Full record matching is the only correct behavior for a `:bag` table, where several records share a key, and on a `:set` table it means a delete never clobbers a newer version of a record written since you read it.
 >
-> When you hold an identifier rather than a record you know is current, use `withdraw/1`. It matches on a query, so staleness cannot affect it, it is atomic, and it reports what happened:
+> When you hold an identifier rather than a record you know is current, use `withdraw/1` (`withdraw/2` on an `ActiveRepo`). It matches on a query, so staleness cannot affect it, it is atomic, and it reports what happened:
 >
 > ```elixir
 > case MyApp.People.Store.withdraw(%{uuid: uuid}) do
@@ -312,9 +312,10 @@ end
 Add it to your supervision tree like any other process (`children = [MyApp.ActiveRepo]`). Tables may freely mix `:ets` and `:mnesia`; each call dispatches to the adapter configured on the given table.
 
 ### ActiveRepo API
-Reads and `withdraw` take the table module as the first argument; writes and deletes infer the table from the struct:
+Every operation a [`Store`](#store-api) offers is available on an `ActiveRepo`, with the same behavior — only the arities differ. Reads and `withdraw` take the table module as the first argument, while `write` and `delete` infer the table from the struct (or from a changeset's data):
 ```elixir
 MyApp.ActiveRepo.write(%Person{...})          # table inferred from the struct
+MyApp.ActiveRepo.write(Person.changeset(%Person{}, attrs))  # or from a changeset
 MyApp.ActiveRepo.withdraw(Dog, query)         # reads take the table explicitly
 MyApp.ActiveRepo.all(Person)
 MyApp.ActiveRepo.one(Dog, %{name: "gem"})
@@ -322,7 +323,13 @@ MyApp.ActiveRepo.select(Person, query)
 MyApp.ActiveRepo.delete(%Dog{} = dog)
 MyApp.ActiveRepo.delete_all(Person)
 ```
-- `ActiveRepo.all/1`, `ActiveRepo.delete/1`, `ActiveRepo.delete_all/1`, `ActiveRepo.one/2`, `ActiveRepo.select/2`, `ActiveRepo.withdraw/2`, `ActiveRepo.write/1`
+- `ActiveRepo.all/1` Get all records stored in a table
+- `ActiveRepo.delete/1` Delete the record provided, matched in full — see [Deleting a record](#deleting-a-record)
+- `ActiveRepo.delete_all/1` Delete all records stored in a table
+- `ActiveRepo.one/2` Get one record from a table matching either an attributes search or `match` query
+- `ActiveRepo.select/2` Get all records from a table matching either an attributes search or `match` query
+- `ActiveRepo.withdraw/2` Atomically get one record from a table matching either an attributes search or `match` query, delete the record and return it — the same take-once guarantee as `Store.withdraw/1`
+- `ActiveRepo.write/1` Write a record into its table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `Ecto.Repo.insert/1`
 - An operation for a struct or table that is not part of the `ActiveRepo` returns `{:error, :unknown_table}`.
 
 ### Per-table options

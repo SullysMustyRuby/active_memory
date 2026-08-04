@@ -28,15 +28,17 @@ defmodule ActiveMemory.ActiveRepo do
   the adapter configured on the given table.
 
   ## ActiveRepo API
-  Reads and `withdraw` take the table module as the first argument; writes and
-  deletes infer the table from the struct.
+  Every operation an `ActiveMemory.Store` offers is available here, with the same
+  behavior; only the arities differ. Reads and `withdraw` take the table module as
+  the first argument, while `write` and `delete` infer the table from the struct (or
+  from a changeset's data).
     - `ActiveRepo.all/1` Get all records stored in a table
     - `ActiveRepo.delete/1` Delete the record provided, matched in full (see [Deleting a record](#module-deleting-a-record))
     - `ActiveRepo.delete_all/1` Delete all records stored in a table
-    - `ActiveRepo.one/2` Get one record from a table matching an attributes search or `match` query
-    - `ActiveRepo.select/2` Get all records from a table matching an attributes search or `match` query
-    - `ActiveRepo.withdraw/2` Get, delete and return one record from a table
-    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`
+    - `ActiveRepo.one/2` Get one record from a table matching either an attributes search or `match` query
+    - `ActiveRepo.select/2` Get all records from a table matching either an attributes search or `match` query
+    - `ActiveRepo.withdraw/2` **Atomically** get one record from a table matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
+    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
 
   An operation for a struct or table that is not part of the `ActiveRepo` returns
   `{:error, :unknown_table}`.
