@@ -85,6 +85,8 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   If you need to modify the majority use the following syntax: `[majority: true]`
   """
 
+  require Logger
+
   @doc """
   Bring an existing Mnesia table's schema in line with its `ActiveMemory.Table`
   options.
@@ -95,26 +97,26 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   order: the replica nodes for each copy type, `access_mode`, `index`, `load_order`
   and `majority`.
 
-  Returns `:ok`.
-
-  > #### Failures are not translated {: .warning}
-  >
-  > This runs while a `Store` is starting up, and an option change Mnesia rejects
-  > propagates as a raise rather than an `{:error, reason}` — a copy type change it
-  > will not perform, or a set of copy options naming the same node for two different
-  > copy types. The store's `init/1` then fails and the supervisor retries. If a store
-  > will not start after you change a table's `options`, this is the first place to
-  > look.
+  Returns `:ok`. A change Mnesia refuses at runtime — a replica on a node that is
+  not reachable, a copy type change it will not perform — is logged as a warning and
+  skipped, so the store still starts and the table keeps its current setting for
+  that option. The one exception is a copy configuration that is wrong in the code
+  itself (the same node under two copy types), which raises `ArgumentError`: it
+  would fail identically on every boot, so it is a bug to fix rather than a
+  condition to ride out.
   """
   @spec migrate_table_options(atom()) :: :ok
   def migrate_table_options(table) do
-    table.__attributes__(:table_options)
-    |> migrate_table_copies_to_add(table)
-    |> migrate_table_copies_to_delete(table)
-    |> migrate_access_mode(table)
-    |> migrate_indexes(table)
-    |> migrate_load_order(table)
-    |> migrate_majority(table)
+    options = table.__attributes__(:table_options)
+
+    validate_copy_options!(options, table)
+
+    migrate_table_copies_to_add(options, table)
+    migrate_table_copies_to_delete(options, table)
+    migrate_access_mode(options, table)
+    migrate_indexes(options, table)
+    migrate_load_order(options, table)
+    migrate_majority(options, table)
 
     :ok
   end
@@ -128,8 +130,8 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
         {:aborted, {:already_exists, _, _}} ->
           change_table_copy_type(table, node, copy_type)
 
-        {:atomic, :ok} ->
-          :ok
+        result ->
+          log_refused(result, table, "add a #{copy_type} replica on #{inspect(node)}")
       end
     end
 
@@ -147,13 +149,21 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   defp add_indexes([], _table), do: nil
 
   defp add_indexes(indexes, table) do
-    Enum.each(indexes, fn index -> :mnesia.add_table_index(table, index) end)
+    Enum.each(indexes, fn index ->
+      table
+      |> :mnesia.add_table_index(index)
+      |> log_refused(table, "add an index on #{inspect(index)}")
+    end)
   end
 
   defp change_table_copy_type(table, node, copy_type) do
     case :mnesia.change_table_copy_type(table, node, copy_type) do
-      {:atomic, :ok} -> :ok
-      other -> other
+      # the replica already has the requested copy type; nothing to change
+      {:aborted, {:already_exists, _table, _node, _type}} ->
+        :ok
+
+      result ->
+        log_refused(result, table, "change the #{inspect(node)} replica to #{copy_type}")
     end
   end
 
@@ -173,51 +183,35 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     current_nodes -- options_nodes
   end
 
-  defp copy_type_validation(_ram_nodes, [], []), do: :ok
+  defp copy_options(options) do
+    disc_nodes = Keyword.get(options, :disc_copies, []) |> Enum.sort()
 
-  defp copy_type_validation([], _disc_nodes, []), do: :ok
+    ram_nodes =
+      Keyword.get(options, :ram_copies, ram_copy_default(disc_nodes)) |> Enum.sort()
 
-  defp copy_type_validation([], [], _disc_only_nodes), do: :ok
+    disc_only_nodes = Keyword.get(options, :disc_only_copies, []) |> Enum.sort()
 
-  defp copy_type_validation([], disc_nodes, disc_only_nodes) do
-    disc_nodes_validation(disc_nodes, disc_only_nodes)
-  end
-
-  defp copy_type_validation(ram_nodes, [], disc_only_nodes) do
-    ram_nodes
-    |> Enum.any?(&Enum.member?(disc_only_nodes, &1))
-    |> parse_check(:ram_copies)
-  end
-
-  defp copy_type_validation(ram_nodes, disc_nodes, []) do
-    ram_nodes
-    |> Enum.any?(&Enum.member?(disc_nodes, &1))
-    |> parse_check(:ram_copies)
-  end
-
-  defp copy_type_validation(ram_nodes, disc_nodes, disc_only_nodes) do
-    with {:ok, :ram_copies} <- ram_nodes_validation(ram_nodes, disc_nodes, disc_only_nodes),
-         {:ok, :disc_copies} <- disc_nodes_validation(disc_nodes, disc_only_nodes) do
-      :ok
-    end
+    {ram_nodes, disc_nodes, disc_only_nodes}
   end
 
   defp delete_copy_type([], _table), do: :ok
 
   defp delete_copy_type(nodes, table) do
-    Enum.each(nodes, &:mnesia.del_table_copy(table, &1))
+    Enum.each(nodes, fn node ->
+      table
+      |> :mnesia.del_table_copy(node)
+      |> log_refused(table, "remove the replica on #{inspect(node)}")
+    end)
   end
 
   defp delete_indexes([], _table), do: nil
 
   defp delete_indexes(indexes, table) do
-    Enum.each(indexes, fn index -> :mnesia.del_table_index(table, index) end)
-  end
-
-  defp disc_nodes_validation(disc_nodes, disc_only_nodes) do
-    disc_nodes
-    |> Enum.any?(&Enum.member?(disc_only_nodes, &1))
-    |> parse_check(:disc_copies)
+    Enum.each(indexes, fn index ->
+      table
+      |> :mnesia.del_table_index(index)
+      |> log_refused(table, "remove the index on #{inspect(index)}")
+    end)
   end
 
   defp get_indexes([], _attributes), do: []
@@ -227,15 +221,32 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     |> Enum.map(fn index -> Enum.at(attributes, index - 2) end)
   end
 
+  # Logs a Mnesia refusal and moves on. Every reconciliation below runs while a
+  # `Store` is starting, and a change Mnesia will not perform must not keep the
+  # store from booting — the table works, it just keeps its current setting.
+  defp log_refused({:atomic, :ok}, _table, _change), do: :ok
+
+  defp log_refused({:aborted, reason}, table, change) do
+    Logger.warning(
+      "ActiveMemory could not #{change} for #{inspect(table)}: " <>
+        "Mnesia refused with #{inspect(reason)}. The table keeps its current setting."
+    )
+
+    :ok
+  end
+
   defp migrate_access_mode(options, table) do
     option = Keyword.get(options, :access_mode, :read_write)
 
     case :mnesia.table_info(table, :access_mode) do
-      ^option -> :ok
-      _ -> :mnesia.change_table_access_mode(table, option)
-    end
+      ^option ->
+        :ok
 
-    options
+      _other ->
+        table
+        |> :mnesia.change_table_access_mode(option)
+        |> log_refused(table, "change the access mode to #{inspect(option)}")
+    end
   end
 
   defp migrate_indexes(options, table) do
@@ -246,51 +257,45 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
 
     add_indexes(new_indexes -- current_indexes, table)
     delete_indexes(current_indexes -- new_indexes, table)
-    options
+    :ok
   end
 
   defp migrate_load_order(options, table) do
     load_order = Keyword.get(options, :load_order, 0)
 
     case :mnesia.table_info(table, :load_order) do
-      ^load_order -> :ok
-      _ -> :mnesia.change_table_load_order(table, load_order)
-    end
+      ^load_order ->
+        :ok
 
-    options
+      _other ->
+        table
+        |> :mnesia.change_table_load_order(load_order)
+        |> log_refused(table, "change the load order to #{load_order}")
+    end
   end
 
   defp migrate_majority(options, table) do
     majority = Keyword.get(options, :majority, false)
 
     case :mnesia.table_info(table, :majority) do
-      ^majority -> :ok
-      _ -> :mnesia.change_table_majority(table, majority)
-    end
+      ^majority ->
+        :ok
 
-    options
+      _other ->
+        table
+        |> :mnesia.change_table_majority(majority)
+        |> log_refused(table, "change majority to #{majority}")
+    end
   end
 
   defp migrate_table_copies_to_add(options, table) do
-    options_disc_nodes = Keyword.get(options, :disc_copies, []) |> Enum.sort()
+    {ram_nodes, disc_nodes, disc_only_nodes} = copy_options(options)
 
-    options_ram_nodes =
-      Keyword.get(options, :ram_copies, ram_copy_default(options_disc_nodes)) |> Enum.sort()
+    add_copy_types(ram_nodes, table, :ram_copies)
+    add_copy_types(disc_nodes, table, :disc_copies)
+    add_copy_types(disc_only_nodes, table, :disc_only_copies)
 
-    options_disc_only_nodes = Keyword.get(options, :disc_only_copies, []) |> Enum.sort()
-
-    with :ok <-
-           copy_type_validation(options_ram_nodes, options_disc_nodes, options_disc_only_nodes),
-         :ok <- add_copy_types(options_ram_nodes, table, :ram_copies),
-         :ok <- add_copy_types(options_disc_nodes, table, :disc_copies),
-         :ok <-
-           add_copy_types(
-             options_disc_only_nodes,
-             table,
-             :disc_only_copies
-           ) do
-      options
-    end
+    :ok
   end
 
   defp ram_copy_default(options_disc_nodes) do
@@ -301,17 +306,12 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   end
 
   defp migrate_table_copies_to_delete(options, table) do
-    with :ok <- remove_copy_types(options, table, :ram_copies, [node()]),
-         :ok <- remove_copy_types(options, table, :disc_copies),
-         :ok <- remove_copy_types(options, table, :disc_only_copies) do
-      options
-    end
+    remove_copy_types(options, table, :ram_copies, [node()])
+    remove_copy_types(options, table, :disc_copies)
+    remove_copy_types(options, table, :disc_only_copies)
+
+    :ok
   end
-
-  defp parse_check(false, copy_type), do: {:ok, copy_type}
-
-  defp parse_check(true, copy_type),
-    do: {:error, "#{copy_type} options are invalid. Please read the documentation"}
 
   defp remove_copy_types(options, table, copy_type, default_nodes \\ []) do
     options_nodes =
@@ -326,9 +326,25 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
     |> delete_copy_type(table)
   end
 
-  defp ram_nodes_validation(ram_nodes, disc_nodes, disc_only_nodes) do
-    ram_nodes
-    |> Enum.any?(&(Enum.member?(disc_nodes, &1) or Enum.member?(disc_only_nodes, &1)))
-    |> parse_check(:ram_copies)
+  # A node holds exactly one copy of a table, so the same node under two copy
+  # types is a configuration bug — deterministic on every boot — and raises,
+  # unlike a runtime refusal, which is logged and skipped.
+  defp validate_copy_options!(options, table) do
+    {ram_nodes, disc_nodes, disc_only_nodes} = copy_options(options)
+
+    overlapping =
+      Enum.filter(ram_nodes, &(&1 in disc_nodes or &1 in disc_only_nodes)) ++
+        Enum.filter(disc_nodes, &(&1 in disc_only_nodes))
+
+    case overlapping do
+      [] ->
+        :ok
+
+      nodes ->
+        raise ArgumentError,
+              "#{inspect(table)} lists #{inspect(Enum.uniq(nodes))} under more than one " <>
+                "copy type. A node holds exactly one copy of a table, so each node may " <>
+                "appear in only one of :ram_copies, :disc_copies and :disc_only_copies."
+    end
   end
 end

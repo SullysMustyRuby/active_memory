@@ -52,7 +52,8 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
 
     @tag :migration
     test "updates the disc copies on startup" do
-      [app_instance] = LocalCluster.start_nodes("app_instance", 1)
+      {:ok, cluster} = LocalCluster.start_link(1, prefix: "app_instance")
+      {:ok, [app_instance]} = LocalCluster.nodes(cluster)
 
       {[:stopped, :stopped], []} = :rpc.multicall(:mnesia, :stop, [])
       :ok = :mnesia.delete_schema([Node.self() | Node.list()])
@@ -74,12 +75,13 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
       assert :mnesia.table_info(Person, :disc_copies) == []
       assert :mnesia.table_info(Person, :ram_copies) == [node()]
 
-      :ok = LocalCluster.stop_nodes([app_instance])
+      :ok = LocalCluster.stop(cluster)
     end
 
     @tag :migration
     test "updates the disc_only_copies on startup" do
-      [app_instance] = LocalCluster.start_nodes("app_instance", 1)
+      {:ok, cluster} = LocalCluster.start_link(1, prefix: "app_instance")
+      {:ok, [app_instance]} = LocalCluster.nodes(cluster)
 
       {[:stopped, :stopped], []} = :rpc.multicall(:mnesia, :stop, [])
       :ok = :mnesia.delete_schema([Node.self() | Node.list()])
@@ -101,12 +103,13 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
       assert :mnesia.table_info(Person, :disc_only_copies) == []
       assert :mnesia.table_info(Person, :ram_copies) == [:"manager@127.0.0.1"]
 
-      :ok = LocalCluster.stop_nodes([app_instance])
+      :ok = LocalCluster.stop(cluster)
     end
 
     @tag :migration
     test "removes the local ram_copy on startup" do
-      [app_instance] = LocalCluster.start_nodes("app_instance", 1)
+      {:ok, cluster} = LocalCluster.start_link(1, prefix: "app_instance")
+      {:ok, [app_instance]} = LocalCluster.nodes(cluster)
 
       :stopped = :mnesia.stop()
       :ok = :mnesia.create_schema([node()])
@@ -125,7 +128,7 @@ defmodule ActiveMemory.Adapters.Mnesia.MigrationTest do
 
       assert :mnesia.table_info(Whale, :ram_copies) == [app_instance]
 
-      :ok = LocalCluster.stop_nodes([app_instance])
+      :ok = LocalCluster.stop(cluster)
     end
 
     @tag :migration

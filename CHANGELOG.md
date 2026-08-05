@@ -54,6 +54,16 @@ the read API covers what `Ecto.Repo` offers.
 - An Ecto schema table with an autogenerating primary key of a custom type
   (`@primary_key {:uuid, Ecto.UUID, autogenerate: true}`) generated no key, so
   every record was written under a `nil` key and collapsed onto one entry.
+- Reconciling a recovered Mnesia table's options could crash the store's startup:
+  an option change Mnesia refused raised out of `init/1`, and a table naming more
+  than one copy type (`ram_copies` plus `disc_copies`, for instance) crashed the
+  reconciliation even when the configuration was valid. A refused change is now
+  logged as a warning and skipped, so the store starts and the table keeps its
+  current setting. A copy configuration that is wrong in the code itself — the same
+  node under two copy types — raises `ArgumentError`, since it would fail on every
+  boot.
+- Compile warnings from the test dependency `local_cluster` (deprecated `:slave`
+  usage, charlist syntax) are gone with the upgrade to 2.1.
 
 ### Documentation
 

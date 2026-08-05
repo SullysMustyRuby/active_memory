@@ -64,7 +64,7 @@ defmodule ActiveMemory.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0"},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
-      {:local_cluster, "~> 1.2", only: [:test]}
+      {:local_cluster, "~> 2.1", only: [:test]}
     ]
   end
 
