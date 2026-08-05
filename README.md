@@ -539,9 +539,7 @@ Create an `ActiveMemory.Store` to manage your admins easily and safely.
 **and many many many more...**
 
 ## Demo Application
-The following Repo is a demo application using ActiveMemory and MnesiaManager concept.
-- [BeamDemo](https://github.com/SullysMustyRuby/BeamDemo)
-- [MnesiaManager](https://github.com/SullysMustyRuby/ActiveMemoryManager)
+A demo application built on the current release — showing one-time tokens with `withdraw/1` and `ttl`, sessions, and feature flags — is in progress and will be linked here. Until then, the [Coming from Ecto](https://hexdocs.pm/active_memory/coming_from_ecto.html) guide has complete, current examples.
 
 ## Planned Enhancements
 
