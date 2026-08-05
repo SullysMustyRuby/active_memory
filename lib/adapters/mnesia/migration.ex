@@ -85,6 +85,27 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   If you need to modify the majority use the following syntax: `[majority: true]`
   """
 
+  @doc """
+  Bring an existing Mnesia table's schema in line with its `ActiveMemory.Table`
+  options.
+
+  Called from `ActiveMemory.Adapters.Mnesia.create_table/1` when the table already
+  exists — the `{:ok, :recovered}` path — so a table that outlived this node's process
+  picks up option changes made in the code since it was created. It reconciles, in
+  order: the replica nodes for each copy type, `access_mode`, `index`, `load_order`
+  and `majority`.
+
+  Returns `:ok`.
+
+  > #### Failures are not translated {: .warning}
+  >
+  > This runs while a `Store` is starting up, and an option change Mnesia rejects
+  > propagates as a raise rather than an `{:error, reason}` — a copy type change it
+  > will not perform, or a set of copy options naming the same node for two different
+  > copy types. The store's `init/1` then fails and the supervisor retries. If a store
+  > will not start after you change a table's `options`, this is the first place to
+  > look.
+  """
   @spec migrate_table_options(atom()) :: :ok
   def migrate_table_options(table) do
     table.__attributes__(:table_options)

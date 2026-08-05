@@ -119,7 +119,7 @@ end
   |> MyApp.Planet.Store.write()
 ```
 
-`write/1` accepts a changeset directly, the way `Ecto.Repo.insert/1` does — no `Ecto.Changeset.apply_changes/1` step of your own. This works the same on a `Store` and on an [`ActiveRepo`](#activerepo-api), which infers the table from the changeset's data. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, so a Phoenix form renders the errors:
+`write/1` accepts a changeset directly, the way `c:Ecto.Repo.insert/2` does — no `Ecto.Changeset.apply_changes/1` step of your own. This works the same on a `Store` and on an [`ActiveRepo`](#activerepo-api), which infers the table from the changeset's data. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, so a Phoenix form renders the errors:
 
 ```elixir
 def create_planet(attrs) do
@@ -157,12 +157,12 @@ With `@primary_key false` the first declared field becomes the table key. Virtua
 - `Store.exists?/2` Whether any record matches an attributes search or `match` query
 - `Store.get/1` and `Store.get!/1` Get the record with the given primary key; the bang variant raises `ActiveMemory.NotFoundError`
 - `Store.get_by/1` and `Store.get_by!/1` Get the single record matching an attributes search
-- `Store.one/1` Get one record matching either an attributes search or `match` query. Raises `ActiveMemory.MultipleResultsError` when several match, as `Ecto.Repo.one/2` does
+- `Store.one/1` Get one record matching either an attributes search or `match` query. Raises `ActiveMemory.MultipleResultsError` when several match, as `c:Ecto.Repo.one/2` does
 - `Store.one!/1` Like `one/1` but raises `ActiveMemory.NotFoundError`
 - `Store.reload/1` and `Store.reload!/1` Re-read a record by its primary key
 - `Store.select/2` Get all records matching either an attributes search or `match` query, optionally ordered and paged
 - `Store.withdraw/1` Atomically get one record matching either an attributes search or `match` query, delete the record and return it. The find-and-delete is a single atomic operation (`:ets.select_delete/2` for ETS, a `:mnesia.transaction/1` for Mnesia), so under concurrent access exactly one caller receives `{:ok, record}` for a given record and any others receive `{:error, :not_found}`. This makes `withdraw/1` safe for take-once workloads such as one time use tokens.
-- `Store.write/1` Write a record into the memory table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `Ecto.Repo.insert/1`
+- `Store.write/1` Write a record into the memory table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `c:Ecto.Repo.insert/2`
 
 ## Reading, counting, ordering
 Reads by primary key, and the counts, come out the way an Ecto user expects. The primary key is the table's first field — `:uuid` on a table using `auto_generate_uuid: true`, an Ecto schema's declared key, or the first field declared:
@@ -177,7 +177,7 @@ Store.exists?(%{active?: true})
 {:ok, person} = Store.reload(stale_person)    # re-read by key
 ```
 
-A query meant to find one record that matches several raises `ActiveMemory.MultipleResultsError` from `one/1`, `one!/1`, `get_by/1` and `get_by!/1`, exactly as `Ecto.Repo.one/2` does. Use `select/2` when many records are expected.
+A query meant to find one record that matches several raises `ActiveMemory.MultipleResultsError` from `one/1`, `one!/1`, `get_by/1` and `get_by!/1`, exactly as `c:Ecto.Repo.one/2` does. Use `select/2` when many records are expected.
 
 Ordering and paging are options on the reads:
 
@@ -300,6 +300,40 @@ A few things to be aware of:
 - **Mnesia stores are unaffected.** Mnesia tables are owned by the Mnesia subsystem rather than the `Store` process, so they already survive a `Store` crash; the heir is purely an ETS concern.
 - **Scope is process crashes, not node restarts.** The heir protects against `Store` crashes and supervisor restarts. It does **not** protect against a full node/BEAM restart, which clears all ETS regardless. For data that must survive a restart, use a Mnesia store with `disc_copies`.
 
+## Running on more than one node (and surviving a partition)
+An ETS table is node-local: each node has its own, and nothing is shared. A Mnesia table can be replicated across nodes with `ram_copies`/`disc_copies`, which is where network partitions become a concern.
+
+Mnesia's partition behavior is the most common reason teams walk away from it, and the mitigation is one table option that is **off by default**:
+
+```elixir
+defmodule MyApp.Sessions.Session do
+  use ActiveMemory.Table,
+    options: [
+      majority: true,
+      ram_copies: [:"node1@host", :"node2@host", :"node3@host"]
+    ]
+
+  attributes do
+    field(:token, :string)
+    field(:user_id, :integer)
+  end
+end
+```
+
+`majority: true` requires a **majority of that table's replicas to be reachable before a transactional write commits**. On the losing side of a partition writes are aborted instead of accepted, so the two sides do not silently diverge.
+
+**Why the default hurts.** With `majority: false`, a partition leaves every node holding a replica that happily accepts writes. Both sides diverge, and when the network heals Mnesia reports `inconsistent_database` and **stops rather than guessing** how to merge them. That is the correct conservative choice — there is no right automatic merge without knowing what the data means — but it means an operator has to intervene.
+
+**What it costs.**
+- Writes on the minority side fail: availability traded for consistency.
+- You want an **odd** number of replicas. With two, neither side of a split holds a majority and writes stop on both.
+- It covers **transactional** writes. ActiveMemory's reads are dirty by design (that is what makes them fast), so a read on the minority side still returns that replica's data.
+- It is per table, so one table can opt in without changing the rest.
+
+**If that is not enough.** Quorum writes reduce divergence; they do not make Mnesia partition tolerant. If the data genuinely cannot tolerate a partition, keep the system of record in a database and treat the ActiveMemory table as derived, or use a Raft backed store such as [Khepri](https://hexdocs.pm/khepri) — built by the RabbitMQ team to replace Mnesia for exactly this reason.
+
+**On a single node none of this applies.** One replica means no partition to survive, and `majority: true` costs nothing.
+
 ## Expiry (TTL)
 Give a `Table` a `ttl` (time-to-live, in milliseconds) and its records expire automatically — ideal for the one-time tokens, 2FA codes, magic links and short-lived API keys in [Potential Use Cases](#potential-use-cases).
 
@@ -370,7 +404,7 @@ MyApp.ActiveRepo.delete_all(Person)
 - `ActiveRepo.reload/1` and `ActiveRepo.reload!/1` Re-read a record by its primary key, inferring the table
 - `ActiveRepo.select/3` Get all records from a table matching either an attributes search or `match` query, optionally ordered and paged
 - `ActiveRepo.withdraw/2` Atomically get one record from a table matching either an attributes search or `match` query, delete the record and return it — the same take-once guarantee as `Store.withdraw/1`
-- `ActiveRepo.write/1` Write a record into its table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `Ecto.Repo.insert/1`
+- `ActiveRepo.write/1` Write a record into its table. Takes a struct or an `Ecto.Changeset`; an invalid changeset is returned as `{:error, changeset}` with its `action` set, exactly like `c:Ecto.Repo.insert/2`
 - An operation for a struct or table that is not part of the `ActiveRepo` returns `{:error, :unknown_table}`.
 
 ### Per-table options

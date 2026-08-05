@@ -22,7 +22,7 @@ the read API covers what `Ecto.Repo` offers.
   key, a custom key such as `@primary_key {:uuid, Ecto.UUID, autogenerate: true}`,
   and `timestamps()`.
 - `write/1` accepts an `Ecto.Changeset` as well as a struct, like
-  `Ecto.Repo.insert/1`. An invalid changeset returns `{:error, changeset}` with its
+  `c:Ecto.Repo.insert/2`. An invalid changeset returns `{:error, changeset}` with its
   `action` set to `:insert`, which is what a Phoenix form needs to render errors.
 - `get/1`, `get!/1`, `get_by/1`, `get_by!/1`, `one!/1`, `reload/1` and `reload!/1`.
   The bang variants raise `ActiveMemory.NotFoundError`.
@@ -41,7 +41,7 @@ the read API covers what `Ecto.Repo` offers.
 
 - **`one/1` now raises `ActiveMemory.MultipleResultsError`** when a query matches
   more than one record, instead of returning `{:error, :more_than_one_result}`.
-  This matches `Ecto.Repo.one/2`. `withdraw/1` raises there too, since deleting an
+  This matches `c:Ecto.Repo.one/2`. `withdraw/1` raises there too, since deleting an
   arbitrary one of several matches would be wrong. Callers matching on
   `{:error, :more_than_one_result}` need updating.
 - An Ecto schema table that declares a primary key somewhere other than its first

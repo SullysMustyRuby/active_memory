@@ -47,7 +47,7 @@ defmodule ActiveMemory.ActiveRepo do
     - `ActiveRepo.reload!/1` Like `reload/1` but raises `ActiveMemory.NotFoundError`
     - `ActiveRepo.select/3` Get all records from a table matching either an attributes search or `match` query, optionally ordered and paged
     - `ActiveRepo.withdraw/2` **Atomically** get one record from a table matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
-    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
+    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `c:Ecto.Repo.insert/2`
 
   An operation for a struct or table that is not part of the `ActiveRepo` returns
   `{:error, :unknown_table}`.

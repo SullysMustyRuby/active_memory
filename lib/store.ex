@@ -18,7 +18,7 @@ defmodule ActiveMemory.Store do
     - `Store.reload!/1` Like `reload/1` but raises `ActiveMemory.NotFoundError`
     - `Store.select/2` Get all records matching either an attributes search or `match` query, optionally ordered and paged
     - `Store.withdraw/1` **Atomically** get one record matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
-    - `Store.write/1` Write a record into the memory table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
+    - `Store.write/1` Write a record into the memory table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `c:Ecto.Repo.insert/2`
 
   ## Reading a single record
   `get/1` reads by primary key — the table's first field, which is what ETS and
@@ -34,7 +34,7 @@ defmodule ActiveMemory.Store do
 
   A query that is meant to find one record but matches several raises
   `ActiveMemory.MultipleResultsError` from `one/1`, `one!/1`, `get_by/1` and
-  `get_by!/1`, as `Ecto.Repo.one/2` does. Use `select/2` when many records are
+  `get_by!/1`, as `c:Ecto.Repo.one/2` does. Use `select/2` when many records are
   expected.
 
   Because reads and writes match a record in full, a struct held across a change

@@ -59,7 +59,7 @@ defmodule ActiveMemory.Table do
   Types are not enforced on `write/1` — ETS and Mnesia store any term — they exist
   to power `Ecto.Changeset` casting and validation, which works directly on the
   table struct. `write/1` accepts the changeset itself, the way
-  `Ecto.Repo.insert/1` does:
+  `c:Ecto.Repo.insert/2` does:
 
   ```elixir
   {:ok, planet} =
@@ -196,9 +196,51 @@ defmodule ActiveMemory.Table do
   The load order priority is by default 0 (zero) but can be set to any integer. The tables with the highest load order priority are loaded first at startup.
   If you need to change the load order use the following syntax: `[load_order: 2]`
 
-  #### Majority
-  If true, any (non-dirty) update to the table is aborted, unless a majority of the table replicas are available for the commit. When used on a fragmented table, all fragments are given the same the same majority setting.
-  If you need to modify the majority use the following syntax: `[majority: true]`
+  #### Majority (quorum writes, and surviving a network partition)
+  `[majority: true]` requires a **majority of a table's replicas to be reachable
+  before any transactional write commits**. A write on the losing side of a network
+  partition is aborted rather than accepted, which is the single most effective
+  thing you can do about Mnesia's partition behavior. It defaults to `false`.
+
+  ```elixir
+  use ActiveMemory.Table,
+    options: [
+      majority: true,
+      ram_copies: [:"node1@host", :"node2@host", :"node3@host"]
+    ]
+  ```
+
+  ##### Why it matters
+  With the default `majority: false`, a partition leaves every node still holding a
+  replica willing to accept writes. Both sides diverge happily, and when the network
+  heals Mnesia detects the divergence, reports `inconsistent_database`, and **stops
+  rather than guessing** how to merge. That is not Mnesia being careless: there is no
+  correct automatic merge without knowing what the data means. But it does mean an
+  operator has to resolve it, and it is the reason many teams give up on Mnesia.
+
+  With `majority: true` the minority side refuses writes for that table, so there is
+  much less to reconcile — the same trade CP systems make, and roughly what Mnesia's
+  `pause_minority` strategy does at the node level.
+
+  ##### What it costs
+    - Writes on the minority side fail. Availability is traded for consistency.
+    - It needs an odd number of replicas to be useful; with two replicas neither side
+      of a split holds a majority, so writes stop on both.
+    - It applies to **transactional** writes. Mnesia dirty operations bypass the
+      check, and ActiveMemory's reads are dirty by design (that is what makes them
+      fast), so a read on the minority side still returns that replica's data.
+    - It is per table, so a table can opt in without changing the rest.
+
+  ##### If you need more than this
+  Quorum writes reduce divergence; they do not make Mnesia a partition tolerant
+  database. If your data genuinely cannot tolerate a partition, the options are to
+  keep the system of record in a database and treat the ActiveMemory table as
+  derived, or to use a Raft backed store such as
+  [Khepri](https://hexdocs.pm/khepri) — the store the RabbitMQ team built to replace
+  Mnesia for exactly this reason.
+
+  For a single node application none of this applies: with one replica there is no
+  partition to survive, and `majority: true` costs nothing.
 
   ### ETS Options
   #### Table Access
