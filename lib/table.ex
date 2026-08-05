@@ -123,14 +123,39 @@ defmodule ActiveMemory.Table do
 
   ### Record Expiry (`ttl`)
   Pass a `ttl` (time-to-live, in milliseconds) to give every record in the table a
-  lifetime. A `ttl` adds an `expires_at` field to the schema (appended last, so it
-  never becomes the table key) and stamps it on each write as `now + ttl`.
+  lifetime. Expiry is tracked in an `expires_at` field holding milliseconds since
+  the epoch, stamped on each write as `now + ttl`.
 
   ```elixir
   use ActiveMemory.Table,
     type: :ets,
     ttl: :timer.hours(1)
   ```
+
+  In an `attributes` block the field is added for you, appended last so it never
+  becomes the table key.
+
+  **An Ecto schema table must declare it explicitly**, because ActiveMemory does not
+  add fields to a schema you wrote — the schema stays the single description of the
+  record, exactly as Ecto treats it:
+
+  ```elixir
+  defmodule MyApp.Token do
+    use ActiveMemory.Table, type: :ets, ttl: :timer.minutes(15)
+
+    use Ecto.Schema
+
+    @primary_key {:uuid, Ecto.UUID, autogenerate: true}
+    embedded_schema do
+      field :value, :string
+      field :expires_at, :integer
+    end
+  end
+  ```
+
+  Declare it last, so it does not take the key position, and type it `:integer`. A
+  `ttl` table without an `expires_at` field would silently never expire, so the
+  table raises when it is created instead.
 
   Expiry is enforced in two complementary ways (see `ActiveMemory.Store` and
   `ActiveMemory.ActiveRepo`): reads never return an expired record, and the owning

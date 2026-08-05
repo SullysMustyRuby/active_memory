@@ -3,13 +3,77 @@ defmodule ActiveMemory.Store do
   # The Store
 
   ## Store API
-    - `Store.all/0` Get all records stored
+    - `Store.all/1` Get all records stored, optionally ordered and paged (see [Ordering and paging](#module-ordering-and-paging))
+    - `Store.count/1` Count the records stored, without reading them (see [Counting](#module-counting))
     - `Store.delete/1` Delete the record provided, matched in full (see [Deleting a record](#module-deleting-a-record))
     - `Store.delete_all/0` Delete all records stored
-    - `Store.one/1` Get one record matching either an attributes search or `match` query
-    - `Store.select/1` Get all records matching either an attributes search or `match` query
+    - `Store.exists?/2` Whether any record matches an attributes search or `match` query
+    - `Store.get/1` Get the record with the given primary key, or `{:error, :not_found}`
+    - `Store.get!/1` Like `get/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.get_by/1` Get the single record matching an attributes search
+    - `Store.get_by!/1` Like `get_by/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.one/1` Get one record matching either an attributes search or `match` query. Raises `ActiveMemory.MultipleResultsError` when several match
+    - `Store.one!/1` Like `one/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.reload/1` Re-read a record from the table by its primary key
+    - `Store.reload!/1` Like `reload/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.select/2` Get all records matching either an attributes search or `match` query, optionally ordered and paged
     - `Store.withdraw/1` **Atomically** get one record matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
     - `Store.write/1` Write a record into the memory table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
+
+  ## Reading a single record
+  `get/1` reads by primary key — the table's first field, which is what ETS and
+  Mnesia key a record on. That is `:uuid` on a table using
+  `auto_generate_uuid: true`, an Ecto schema's declared primary key, or simply the
+  first field declared.
+
+  ```elixir
+  {:ok, person} = MyApp.People.Store.get(uuid)
+  person = MyApp.People.Store.get!(uuid)          # raises ActiveMemory.NotFoundError
+  {:ok, person} = MyApp.People.Store.get_by(%{email: "kara@galactica.com"})
+  ```
+
+  A query that is meant to find one record but matches several raises
+  `ActiveMemory.MultipleResultsError` from `one/1`, `one!/1`, `get_by/1` and
+  `get_by!/1`, as `Ecto.Repo.one/2` does. Use `select/2` when many records are
+  expected.
+
+  Because reads and writes match a record in full, a struct held across a change
+  goes stale; `reload/1` gets the current copy.
+
+  ## Counting
+  `count/1` asks the table for its size (`:ets.info/2`, `:mnesia.table_info/2`), so
+  it is O(1) and never copies records out — unlike `length(all())`.
+
+  On a table with a `ttl` that number includes records that have expired but have
+  not been swept yet, so it can exceed what the reads return. Pass `sweep: true` to
+  delete those first and get a count that agrees with the reads:
+
+  ```elixir
+  MyApp.Tokens.Store.count()               # O(1), may include expired records
+  MyApp.Tokens.Store.count(sweep: true)    # sweeps first, then counts
+  ```
+
+  `exists?/2` has to match a query against fields, so it costs a scan rather than
+  being O(1). It accepts `sweep: true` as well, though the answer never depends on
+  it, since reads already ignore an expired record.
+
+  ## Ordering and paging
+  `all/1` and `select/2` take `:order_by`, `:limit` and `:offset`:
+
+  ```elixir
+  MyApp.People.Store.all(order_by: :last, limit: 20)
+  MyApp.People.Store.all(order_by: [{:desc, :age}, :last], offset: 20, limit: 20)
+  MyApp.People.Store.select(%{cylon?: true}, order_by: :last)
+  ```
+
+  Neither ETS nor Mnesia can order a result, so this sorts after reading —
+  `O(n log n)` over the matched records, not an index backed sort. Without an
+  `:order_by` the order is whatever the table returns, which for a `:set` table is
+  unspecified.
+
+  Values are compared with their own `compare/2` when they have one, so `Decimal`,
+  `DateTime`, `NaiveDateTime`, `Date` and `Time` fields sort correctly instead of by
+  Erlang term order, which compares those structs field by field.
 
   ## Deleting a record
   `delete/1` removes an **exact** record match: the struct you pass is compared

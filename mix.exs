@@ -32,7 +32,12 @@ defmodule ActiveMemory.MixProject do
       docs: [
         main: @name,
         canonical: "https://hexdocs.pm/#{@app}",
-        extras: ["README.md"]
+        extras: [
+          "README.md",
+          "guides/coming_from_ecto.md": [title: "Coming from Ecto"],
+          "CHANGELOG.md": [title: "Changelog"]
+        ],
+        groups_for_extras: [Guides: ~r/guides\//]
       ],
       aliases: [
         test: "test --no-start"
@@ -68,7 +73,7 @@ defmodule ActiveMemory.MixProject do
       name: @app,
       maintainers: [@author],
       licenses: [@license],
-      files: ~w(mix.exs lib README.md),
+      files: ~w(mix.exs lib guides README.md CHANGELOG.md),
       links: %{"Github" => @github}
     ]
   end
