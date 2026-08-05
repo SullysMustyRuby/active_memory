@@ -74,6 +74,12 @@ the read API covers what `Ecto.Repo` offers.
   the `attributes` DSL still adds it for you.
 - `Store` and `ActiveRepo` documentation now describes the same behavior for the
   operations they share.
+- A "Testing" section covering which test modules can run `async: true` — a module
+  owning its own table and store runs concurrently today — and which need
+  `async: false`, namely modules sharing the application's store, since a table's
+  module name is its physical table name.
+- The `majority` option, Mnesia's quorum writes, is documented as the mitigation for
+  partition behavior rather than one line in a list of options.
 
 ## 0.7.4
 

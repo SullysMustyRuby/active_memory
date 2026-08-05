@@ -410,6 +410,78 @@ MyApp.ActiveRepo.delete_all(Person)
 ### Per-table options
 Each `tables:` entry is a table module or a `{table, opts}` tuple. Per-table `seed_file` and `before_init` work exactly as they do for a `Store`; `initial_state` is an `ActiveRepo`-level option (one process, one state). Seeding, the [query interface](#query-interface) and [Resilience](#resilience) all behave the same as for a `Store` — including the [`before_init` recovery caveat](#before-init).
 
+## Testing
+A table's module name **is** its ETS/Mnesia table name, and a `Store` registers itself under its own module name. So isolation between tests comes down to whether they share a table.
+
+### Tests that own their table can be `async: true`
+Give a test module its own table and store and it runs concurrently with every other test module, no configuration required:
+
+```elixir
+defmodule MyApp.CacheTest.Table do
+  use ActiveMemory.Table, type: :ets
+
+  attributes do
+    field(:key, :string)
+    field(:value, :string)
+  end
+end
+
+defmodule MyApp.CacheTest.Store do
+  use ActiveMemory.Store, table: MyApp.CacheTest.Table
+end
+
+defmodule MyApp.CacheTest do
+  use ExUnit.Case, async: true
+
+  alias MyApp.CacheTest.{Store, Table}
+
+  setup_all do
+    {:ok, _pid} = Store.start_link()
+
+    on_exit(fn ->
+      case :ets.whereis(Table) do
+        :undefined -> :ok
+        _ref -> :ets.delete(Table)
+      end
+    end)
+
+    :ok
+  end
+
+  setup do
+    :ok = Store.delete_all()
+  end
+
+  test "stores a value" do
+    {:ok, _record} = Store.write(%Table{key: "a", value: "1"})
+    assert {:ok, %Table{value: "1"}} = Store.get("a")
+  end
+end
+```
+
+Tests **within** a module always run sequentially, so a `setup` calling `delete_all/0` is enough to isolate them from each other.
+
+### Tests that share your application's store need `async: false`
+Testing a context function that reaches for your application's singleton store — `MyApp.Planets.create_planet/1` writing through `MyApp.Planets.Store` — means every such test module writes to the same global table. Two of them running concurrently will see each other's records, so mark those modules `async: false`:
+
+```elixir
+defmodule MyApp.PlanetsTest do
+  # shares MyApp.Planets.Store with the rest of the app
+  use ExUnit.Case, async: false
+
+  setup do
+    :ok = MyApp.Planets.Store.delete_all()
+  end
+
+  # ...
+end
+```
+
+This is the one case ActiveMemory cannot isolate for you yet. A sandbox that gives each test process its own table is on the roadmap for 0.9.0 — see [Planned Enhancements](#planned-enhancements). Until then, code written to take its store as an argument or read it from configuration can be tested with the `async: true` pattern above.
+
+### Mnesia tables in tests
+Mnesia tables are owned by the Mnesia subsystem rather than the `Store`, so clean them up with `:mnesia.delete_table/1` instead of `:ets.delete/1`. Running `mix test --no-start` (as this project does) keeps the application from starting its own stores while the suite manages them.
+
 ## Installation
 
 The package can be installed
@@ -455,7 +527,7 @@ The following Repo is a demo application using ActiveMemory and MnesiaManager co
 ### 0.9.0 — safe to keep
 0.8.0 made ActiveMemory easy to start; 0.9.0 makes it safe to keep — under concurrent tests, growing tables, and concurrent writers.
 
-- **Test isolation.** A sandbox (`ActiveMemory.Test`) so suites that touch a store can run `async: true`. Today every store is a named singleton over a globally named table, which forces `async: false` — the first friction a Phoenix team hits.
+- **Test isolation.** A sandbox (`ActiveMemory.Test`) giving each test process its own table, so test modules that share your application's store can run `async: true`. Test modules that own their table already run concurrently today — see [Testing](#testing) — but a context test writing through the app's singleton store cannot be isolated yet, because a table's module name is its physical table name.
 - **Secondary indexes the reads use.** Attribute queries are full scans today, and the Mnesia `index:` option builds indexes no read path consults — writes pay for maintenance, reads get nothing. Shadow index tables for ETS, `:mnesia.index_read/3` for Mnesia, so querying by attribute stays fast as tables grow. Also what makes `order_by` and pagination affordable.
 - **`update/1` and atomic counters.** `write/1` is a whole-record upsert, so concurrent field updates are last-write-wins and `updated_at` never refreshes. An `update/1` that requires the record to exist, plus an `update_counter`-style atomic increment (`:ets.update_counter/3`) — which unlocks rate limiting as a use case.
 - **Telemetry.** `[:active_memory, :write | :one | :select | :withdraw]` events with duration, table, and result, so the usual observability tooling can see the library.

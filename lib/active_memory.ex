@@ -91,6 +91,14 @@ defmodule ActiveMemory do
       atomic operation, so exactly one concurrent caller wins — what you want for one
       time tokens and 2FA codes.
 
+  ## Testing
+
+  A table's module name is its ETS/Mnesia table name, so isolation comes down to
+  whether tests share a table. A test module that defines its own table and store
+  runs `async: true` alongside every other test module with no configuration. Test
+  modules that share your application's store need `async: false`, since they write
+  to the same global table. See [Testing](readme.html#testing) for both patterns.
+
   ## When to reach for it
 
   ActiveMemory suits a small-to-medium dataset you would be tempted to put in a
