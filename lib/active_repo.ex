@@ -28,18 +28,32 @@ defmodule ActiveMemory.ActiveRepo do
   the adapter configured on the given table.
 
   ## ActiveRepo API
-  Reads and `withdraw` take the table module as the first argument; writes and
-  deletes infer the table from the struct.
+  Every operation an `ActiveMemory.Store` offers is available here, with the same
+  behavior; only the arities differ. Reads and `withdraw` take the table module as
+  the first argument, while `write` and `delete` infer the table from the struct (or
+  from a changeset's data).
     - `ActiveRepo.all/1` Get all records stored in a table
-    - `ActiveRepo.delete/1` Delete the record provided
+    - `ActiveRepo.delete/1` Delete the record provided, matched in full (see [Deleting a record](#module-deleting-a-record))
     - `ActiveRepo.delete_all/1` Delete all records stored in a table
-    - `ActiveRepo.one/2` Get one record from a table matching an attributes search or `match` query
-    - `ActiveRepo.select/2` Get all records from a table matching an attributes search or `match` query
-    - `ActiveRepo.withdraw/2` Get, delete and return one record from a table
-    - `ActiveRepo.write/1` Write a record into its table
+    - `ActiveRepo.one/2` Get one record from a table matching either an attributes search or `match` query
+    - `ActiveRepo.select/2` Get all records from a table matching either an attributes search or `match` query
+    - `ActiveRepo.withdraw/2` **Atomically** get one record from a table matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
+    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
 
   An operation for a struct or table that is not part of the `ActiveRepo` returns
   `{:error, :unknown_table}`.
+
+  ## Deleting a record
+  `delete/1` removes an **exact** record match: the struct you pass is compared
+  field for field against what is stored. A struct that has diverged from the
+  stored copy — a stale read, or one modified in memory — removes nothing and
+  still returns `:ok`, the same answer given for a record that was never there.
+  That is the only correct behavior for a `:bag` table, and on a `:set` table it
+  keeps a delete from clobbering a newer version of the record.
+
+  When you hold an identifier rather than a record you know is current, use
+  `withdraw/2`: it matches on a query, is atomic, and reports whether anything was
+  removed with `{:ok, record}` or `{:error, :not_found}`.
 
   ## Concurrency
   Like a `Store`, an `ActiveRepo` is a `GenServer`, but the data functions above are
@@ -157,7 +171,13 @@ defmodule ActiveMemory.ActiveRepo do
 
       def withdraw(_table, _query), do: {:error, :unknown_table}
 
-      @spec write(map()) :: {:ok, map()} | {:error, any()}
+      @spec write(map() | Ecto.Changeset.t()) ::
+              {:ok, map()} | {:error, Ecto.Changeset.t() | any()}
+      def write(%Ecto.Changeset{data: %{__struct__: table}} = changeset)
+          when table in @tables do
+        Operations.write(changeset, table)
+      end
+
       def write(%{__struct__: table} = struct) when table in @tables do
         Operations.write(struct, table)
       end
