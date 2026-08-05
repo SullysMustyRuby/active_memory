@@ -157,8 +157,11 @@ defmodule ActiveMemory.Store do
         end
       end
 
-      @spec all() :: list(map())
-      def all, do: Operations.all(@table)
+      @spec all(keyword()) :: list(map())
+      def all(opts \\ []), do: Operations.all(@table, opts)
+
+      @spec count(keyword()) :: non_neg_integer()
+      def count(opts \\ []), do: Operations.count(@table, opts)
 
       def create_table, do: Operations.create_table(@table)
 
@@ -168,15 +171,39 @@ defmodule ActiveMemory.Store do
       @spec delete_all() :: :ok | {:error, any()}
       def delete_all, do: Operations.delete_all(@table)
 
+      @spec exists?(map() | tuple(), keyword()) :: boolean()
+      def exists?(query, opts \\ []), do: Operations.exists?(query, @table, opts)
+
+      @spec get(any()) :: {:ok, map()} | {:error, any()}
+      def get(key), do: Operations.get(key, @table)
+
+      @spec get!(any()) :: map()
+      def get!(key), do: Operations.get!(key, @table)
+
+      @spec get_by(map()) :: {:ok, map()} | {:error, any()}
+      def get_by(query), do: Operations.get_by(query, @table)
+
+      @spec get_by!(map()) :: map()
+      def get_by!(query), do: Operations.get_by!(query, @table)
+
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query), do: Operations.one(query, @table)
+
+      @spec one!(map() | list(any())) :: map()
+      def one!(query), do: Operations.one!(query, @table)
+
+      @spec reload(map()) :: {:ok, map()} | {:error, any()}
+      def reload(struct), do: Operations.reload(struct, @table)
+
+      @spec reload!(map()) :: map()
+      def reload!(struct), do: Operations.reload!(struct, @table)
 
       def reload_seeds do
         GenServer.call(__MODULE__, :reload_seeds)
       end
 
-      @spec select(map() | list(any())) :: {:ok, list(map())} | {:error, any()}
-      def select(query), do: Operations.select(query, @table)
+      @spec select(map() | list(any()), keyword()) :: {:ok, list(map())} | {:error, any()}
+      def select(query, opts \\ []), do: Operations.select(query, @table, opts)
 
       def state do
         GenServer.call(__MODULE__, :state)

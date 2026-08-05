@@ -138,11 +138,13 @@ defmodule ActiveMemory.ActiveRepoTest do
       assert MultiRepo.one(Widget, %{name: "nope", color: "none"}) == {:error, :not_found}
     end
 
-    test "returns :more_than_one_result when several match" do
+    test "raises when several match" do
       {:ok, _record} = MultiRepo.write(%Widget{name: "a", color: "blue"})
       {:ok, _record} = MultiRepo.write(%Widget{name: "b", color: "blue"})
 
-      assert MultiRepo.one(Widget, %{color: "blue"}) == {:error, :more_than_one_result}
+      assert_raise ActiveMemory.MultipleResultsError, fn ->
+        MultiRepo.one(Widget, %{color: "blue"})
+      end
     end
 
     test "returns :query_schema_mismatch for unknown keys" do

@@ -9,8 +9,21 @@ defmodule ActiveMemory.Operations do
   `Repo` sharing one implementation rather than duplicating it.
   """
 
-  @spec all(atom()) :: list(map())
-  def all(table), do: adapter(table).all(table) |> reject_expired(table)
+  alias ActiveMemory.MultipleResultsError
+  alias ActiveMemory.NotFoundError
+
+  @doc """
+  Get every record in `table`, optionally ordered and paged.
+
+  See `order/2` for the `:order_by`, `:limit` and `:offset` options.
+  """
+  @spec all(atom(), keyword()) :: list(map())
+  def all(table, opts \\ []) do
+    table
+    |> adapter(table).all()
+    |> reject_expired(table)
+    |> arrange(opts)
+  end
 
   @doc """
   Run the `before_init` methods for a store.
@@ -31,10 +44,28 @@ defmodule ActiveMemory.Operations do
     {:ok, :before_init_success}
   end
 
+  @doc """
+  Count the records in `table` without reading them.
+
+  The count comes from the table itself (`:ets.info/2`, `:mnesia.table_info/2`), so
+  it is O(1) and does not copy records out of the table.
+
+  On a table with a `ttl` that number includes records that have expired but have
+  not been swept yet, so it can exceed what the reads return. Pass `sweep: true` to
+  delete the expired records first and get a count that matches the reads, at the
+  cost of a full pass over the table.
+  """
+  @spec count(atom(), keyword()) :: non_neg_integer()
+  def count(table, opts \\ []) do
+    maybe_sweep(table, opts)
+    adapter(table).count(table)
+  end
+
   @spec create_table(atom()) :: {:ok, :created | :recovered} | {:error, any()}
   def create_table(table) do
     validate_expiry_field!(table)
     validate_autogenerate!(table)
+    validate_primary_key!(table)
     adapter(table).create_table(table)
   end
 
@@ -78,15 +109,123 @@ defmodule ActiveMemory.Operations do
   end
 
   @doc """
+  Whether any record in `table` matches the query.
+
+  Unlike `count/2` this has to look at the records, because a query is matched
+  against their fields, so it costs a scan. Accepts `sweep: true` to reclaim
+  expired records first; the answer itself is unaffected, since reads already
+  ignore an expired record.
+  """
+  @spec exists?(map() | tuple(), atom(), keyword()) :: boolean()
+  def exists?(query, table, opts \\ []) do
+    maybe_sweep(table, opts)
+
+    case select(query, table) do
+      {:ok, []} -> false
+      {:ok, [_record | _rest]} -> true
+      {:error, _message} -> false
+    end
+  end
+
+  @doc """
+  Get the record whose primary key is `key`.
+
+  The primary key is the table's first field — `:uuid` on a table using
+  `auto_generate_uuid: true`, an Ecto schema's declared key, or the first field
+  declared. Returns `{:error, :not_found}` when there is no such record.
+  """
+  @spec get(any(), atom()) :: {:ok, map()} | {:error, any()}
+  def get(key, table), do: one(%{table.__attributes__(:primary_key) => key}, table)
+
+  @doc """
+  Like `get/2` but raises `ActiveMemory.NotFoundError` when there is no such record.
+  """
+  @spec get!(any(), atom()) :: map()
+  def get!(key, table) do
+    case get(key, table) do
+      {:ok, record} ->
+        record
+
+      {:error, :not_found} ->
+        raise NotFoundError,
+          table: table,
+          query: %{table.__attributes__(:primary_key) => key}
+    end
+  end
+
+  @doc """
+  Get the single record matching an attributes map.
+
+  Raises `ActiveMemory.MultipleResultsError` when more than one record matches, as
+  `Ecto.Repo.get_by/3` does.
+  """
+  @spec get_by(map(), atom()) :: {:ok, map()} | {:error, any()}
+  def get_by(query, table) when is_map(query), do: one(query, table)
+
+  @doc """
+  Like `get_by/2` but raises `ActiveMemory.NotFoundError` when nothing matches.
+  """
+  @spec get_by!(map(), atom()) :: map()
+  def get_by!(query, table) when is_map(query) do
+    case get_by(query, table) do
+      {:ok, record} -> record
+      {:error, :not_found} -> raise NotFoundError, table: table, query: query
+    end
+  end
+
+  @doc """
   Get one record matching an attributes map or a `match` query. An expired record
   is treated as `{:error, :not_found}`.
+
+  Raises `ActiveMemory.MultipleResultsError` when the query matches more than one
+  record, mirroring `Ecto.Repo.one/2`. Use `select/3` when many records are
+  expected.
   """
   @spec one(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
   def one(query, table) do
     case adapter(table).one(query, table) do
-      {:ok, %{} = record} -> reject_if_expired(record, table)
-      {:error, message} -> {:error, message}
+      {:ok, %{} = record} ->
+        reject_if_expired(record, table)
+
+      {:error, :more_than_one_result} ->
+        raise MultipleResultsError, table: table, query: query
+
+      {:error, message} ->
+        {:error, message}
     end
+  end
+
+  @doc """
+  Like `one/2` but raises `ActiveMemory.NotFoundError` when nothing matches.
+  """
+  @spec one!(map() | tuple(), atom()) :: map()
+  def one!(query, table) do
+    case one(query, table) do
+      {:ok, record} -> record
+      {:error, :not_found} -> raise NotFoundError, table: table, query: query
+    end
+  end
+
+  @doc """
+  Re-read `struct` from `table` by its primary key.
+
+  Reads and writes match a record in full, so a struct held across a change can go
+  stale. `reload/2` gets the current copy. Returns `{:error, :not_found}` when the
+  record is gone.
+  """
+  @spec reload(map(), atom()) :: {:ok, map()} | {:error, any()}
+  def reload(%{__struct__: table} = struct, table) do
+    get(Map.get(struct, table.__attributes__(:primary_key)), table)
+  end
+
+  def reload(_struct, _table), do: {:error, :bad_schema}
+
+  @doc """
+  Like `reload/2` but raises `ActiveMemory.NotFoundError` when the record is gone.
+  """
+  @spec reload!(map(), atom()) :: map()
+  def reload!(%{__struct__: table} = struct, table) do
+    get!(Map.get(struct, table.__attributes__(:primary_key)), table)
   end
 
   @doc """
@@ -146,20 +285,41 @@ defmodule ActiveMemory.Operations do
   end
 
   @doc """
-  Get all records matching an attributes map or a `match` query.
+  Get all records matching an attributes map or a `match` query, optionally ordered
+  and paged. See `order/2` for the options.
 
   Returns `{:error, :bad_select_query}` for any other query shape.
   """
-  @spec select(map() | tuple(), atom()) :: {:ok, list(map())} | {:error, any()}
-  def select(query, table) when is_map(query) do
-    filter_select(adapter(table).select(query, table), table)
+  @spec select(map() | tuple(), atom(), keyword()) :: {:ok, list(map())} | {:error, any()}
+  def select(query, table, opts \\ [])
+
+  def select(query, table, opts) when is_map(query) do
+    filter_select(adapter(table).select(query, table), table, opts)
   end
 
-  def select({_operand, _lhs, _rhs} = query, table) do
-    filter_select(adapter(table).select(query, table), table)
+  def select({_operand, _lhs, _rhs} = query, table, opts) do
+    filter_select(adapter(table).select(query, table), table, opts)
   end
 
-  def select(_query, _table), do: {:error, :bad_select_query}
+  def select(_query, _table, _opts), do: {:error, :bad_select_query}
+
+  @doc """
+  Sort and page a list of records.
+
+  Neither ETS nor Mnesia can order a result for us, so this sorts in the caller
+  after reading — `O(n log n)` over the matched records, not an index backed sort.
+
+  Options:
+    - `:order_by` a field, `{:asc | :desc, field}`, or a list of either to break ties
+    - `:offset` records to drop after ordering
+    - `:limit` records to keep after the offset
+
+  Values are compared with the struct's own `compare/2` when it has one, so
+  `Decimal`, `DateTime`, `NaiveDateTime`, `Date` and `Time` fields order correctly
+  rather than by Erlang term order.
+  """
+  @spec order(list(map()), keyword()) :: list(map())
+  def order(records, opts), do: arrange(records, opts)
 
   @doc """
   Get one record matching the query, delete it, and return it. An expired record
@@ -168,8 +328,17 @@ defmodule ActiveMemory.Operations do
   @spec withdraw(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
   def withdraw(query, table) do
     case adapter(table).withdraw(query, table) do
-      {:ok, %{} = record} -> reject_if_expired(record, table)
-      other -> other
+      {:ok, %{} = record} ->
+        reject_if_expired(record, table)
+
+      # Deleting an arbitrary one of several matches would be wrong, and as with
+      # `one/2` an unselective query is a caller bug rather than an outcome to
+      # branch on.
+      {:error, :more_than_one_result} ->
+        raise MultipleResultsError, table: table, query: query
+
+      other ->
+        other
     end
   end
 
@@ -223,9 +392,79 @@ defmodule ActiveMemory.Operations do
     end
   end
 
-  defp filter_select({:ok, records}, table), do: {:ok, reject_expired(records, table)}
+  defp arrange(records, opts) do
+    records
+    |> order_by(Keyword.get(opts, :order_by))
+    |> drop(Keyword.get(opts, :offset))
+    |> take(Keyword.get(opts, :limit))
+  end
 
-  defp filter_select({:error, _message} = error, _table), do: error
+  defp order_by(records, nil), do: records
+
+  defp order_by(records, spec) do
+    specs = Enum.map(List.wrap(spec), &normalize_order/1)
+
+    Enum.sort(records, fn left, right -> ordered?(left, right, specs) end)
+  end
+
+  defp normalize_order({direction, field}) when direction in [:asc, :desc] and is_atom(field),
+    do: {direction, field}
+
+  defp normalize_order(field) when is_atom(field), do: {:asc, field}
+
+  defp normalize_order(other) do
+    raise ArgumentError,
+          "invalid :order_by #{inspect(other)}. Use a field, {:asc | :desc, field}, " <>
+            "or a list of either."
+  end
+
+  # Ties fall through to the next spec; running out of specs leaves the pair in
+  # whatever order the sort had them.
+  defp ordered?(_left, _right, []), do: true
+
+  defp ordered?(left, right, [{direction, field} | rest]) do
+    case compare_values(Map.get(left, field), Map.get(right, field)) do
+      :eq -> ordered?(left, right, rest)
+      :lt -> direction == :asc
+      :gt -> direction == :desc
+    end
+  end
+
+  # Erlang term order puts every map above every number and compares struct fields
+  # alphabetically, which would sort Decimal and the calendar types wrongly. Those
+  # all expose `compare/2`, so use it whenever both values are the same struct.
+  defp compare_values(%module{} = left, %module{} = right) do
+    case function_exported?(module, :compare, 2) do
+      true -> module.compare(left, right)
+      false -> term_compare(left, right)
+    end
+  end
+
+  defp compare_values(left, right), do: term_compare(left, right)
+
+  defp term_compare(left, right) when left < right, do: :lt
+  defp term_compare(left, right) when left > right, do: :gt
+  defp term_compare(_left, _right), do: :eq
+
+  defp drop(records, nil), do: records
+
+  defp drop(records, offset) when is_integer(offset) and offset >= 0,
+    do: Enum.drop(records, offset)
+
+  defp take(records, nil), do: records
+  defp take(records, limit) when is_integer(limit) and limit >= 0, do: Enum.take(records, limit)
+
+  defp filter_select({:ok, records}, table, opts),
+    do: {:ok, records |> reject_expired(table) |> arrange(opts)}
+
+  defp filter_select({:error, _message} = error, _table, _opts), do: error
+
+  defp maybe_sweep(table, opts) do
+    case Keyword.get(opts, :sweep, false) do
+      true -> sweep_expired([table], now_ms())
+      false -> :ok
+    end
+  end
 
   defp now_ms, do: System.system_time(:millisecond)
 
@@ -271,6 +510,13 @@ defmodule ActiveMemory.Operations do
   # rather than silently writing every record under a `nil` key.
   defp validate_autogenerate!(table) do
     _specs = table.__attributes__(:autogenerate)
+    :ok
+  end
+
+  # Resolving the primary key raises when an Ecto schema declares one that is not
+  # the table key, so touch it at startup rather than on the first `get/2`.
+  defp validate_primary_key!(table) do
+    _key = table.__attributes__(:primary_key)
     :ok
   end
 

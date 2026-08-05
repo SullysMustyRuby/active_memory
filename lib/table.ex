@@ -324,6 +324,34 @@ defmodule ActiveMemory.Table do
   # primary key, while `:autogenerate` holds every other autogenerating field (a
   # custom type such as `Ecto.UUID`, and `timestamps()`). Both are honored, as the
   # specs Ecto itself uses: `{fields, {module, function, args}}`.
+  # ETS and Mnesia key a record on its first field, so that field is the primary
+  # key regardless of what an Ecto schema declares. A declared key anywhere else
+  # would silently read the wrong field, and a composite key cannot be expressed
+  # at all, so both are rejected.
+  def __primary_key__(module, declared, fields) do
+    first = hd(fields)
+
+    case declared do
+      [] ->
+        first
+
+      [^first] ->
+        first
+
+      [elsewhere] ->
+        raise ArgumentError,
+              "#{inspect(module)} declares #{inspect(elsewhere)} as its primary key but " <>
+                "#{inspect(first)} is the first field, and the first field is the table key. " <>
+                "Declare the primary key first, or use `@primary_key false`."
+
+      [_ | _] = composite ->
+        raise ArgumentError,
+              "#{inspect(module)} declares a composite primary key #{inspect(composite)}, " <>
+                "which an in memory table cannot express. Use a single key field."
+    end
+  end
+
+  @doc false
   def __autogenerate__(nil, autogenerate), do: autogenerate
 
   def __autogenerate__({field, _source, type}, autogenerate)
@@ -397,6 +425,16 @@ defmodule ActiveMemory.Table do
           unquote(adapter)
         )
       end
+
+      # The table key is the first stored field, so a schema whose declared primary
+      # key sits elsewhere would make `get/1` read the wrong field.
+      def __attributes__(:primary_key),
+        do:
+          ActiveMemory.Table.__primary_key__(
+            __MODULE__,
+            __schema__(:primary_key),
+            __schema__(:fields)
+          )
 
       def __attributes__(:query_fields), do: __schema__(:fields)
 
@@ -472,6 +510,10 @@ defmodule ActiveMemory.Table do
         def __attributes__(:auto_generate_uuid), do: unquote(Macro.escape(@auto_generate_uuid))
 
         def __attributes__(:autogenerate), do: unquote(Macro.escape(autogenerate))
+
+        # The first attribute is the table key: `auto_generate_uuid: true` puts
+        # `:uuid` there, otherwise it is the first field declared.
+        def __attributes__(:primary_key), do: unquote(hd(query_fields))
 
         def __attributes__(:match_head),
           do:

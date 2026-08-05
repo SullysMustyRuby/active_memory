@@ -110,9 +110,10 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert DogStore.one(%{breed: "wolf", name: "tiberious"}) == {:error, :not_found}
     end
 
-    test "returns error when more than one record" do
-      assert DogStore.one(%{breed: "PitBull", weight: 60}) ==
-               {:error, :more_than_one_result}
+    test "raises when more than one record matches" do
+      assert_raise ActiveMemory.MultipleResultsError, ~r/expected at most one record/, fn ->
+        DogStore.one(%{breed: "PitBull", weight: 60})
+      end
     end
 
     test "returns error when bad keys are in the query" do
@@ -149,9 +150,10 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert DogStore.one(query) == {:error, :not_found}
     end
 
-    test "returns error when more than one record" do
+    test "raises when more than one record matches" do
       query = match(:breed == "PitBull" and :fixed? == true)
-      assert DogStore.one(query) == {:error, :more_than_one_result}
+
+      assert_raise ActiveMemory.MultipleResultsError, fn -> DogStore.one(query) end
     end
   end
 
@@ -295,9 +297,10 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert DogStore.withdraw(%{name: "tiberious", breed: "T-Rex"}) == {:error, :not_found}
     end
 
-    test "returns error when more than one dog" do
-      assert DogStore.withdraw(%{breed: "PitBull", fixed?: true}) ==
-               {:error, :more_than_one_result}
+    test "raises when more than one dog matches" do
+      assert_raise ActiveMemory.MultipleResultsError, fn ->
+        DogStore.withdraw(%{breed: "PitBull", fixed?: true})
+      end
     end
 
     test "returns error when bad keys are in the query" do
@@ -338,9 +341,10 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert DogStore.withdraw(query) == {:error, :not_found}
     end
 
-    test "returns error when more than one dog" do
+    test "raises when more than one dog matches" do
       query = match(:breed == "PitBull" and :fixed? == true)
-      assert DogStore.withdraw(query) == {:error, :more_than_one_result}
+
+      assert_raise ActiveMemory.MultipleResultsError, fn -> DogStore.withdraw(query) end
     end
   end
 

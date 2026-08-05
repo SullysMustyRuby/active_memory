@@ -129,10 +129,19 @@ defmodule ActiveMemory.ActiveRepo do
         end
       end
 
-      @spec all(atom()) :: list(map()) | {:error, :unknown_table}
-      def all(table) when table in @tables, do: Operations.all(table)
+      @spec all(atom(), keyword()) :: list(map()) | {:error, :unknown_table}
+      def all(table, opts \\ [])
 
-      def all(_table), do: {:error, :unknown_table}
+      def all(table, opts) when table in @tables, do: Operations.all(table, opts)
+
+      def all(_table, _opts), do: {:error, :unknown_table}
+
+      @spec count(atom(), keyword()) :: non_neg_integer() | {:error, :unknown_table}
+      def count(table, opts \\ [])
+
+      def count(table, opts) when table in @tables, do: Operations.count(table, opts)
+
+      def count(_table, _opts), do: {:error, :unknown_table}
 
       @spec delete(map()) :: :ok | {:error, any()}
       def delete(%{__struct__: table} = struct) when table in @tables do
@@ -146,10 +155,49 @@ defmodule ActiveMemory.ActiveRepo do
 
       def delete_all(_table), do: {:error, :unknown_table}
 
+      @spec exists?(atom(), map() | tuple(), keyword()) :: boolean() | {:error, :unknown_table}
+      def exists?(table, query, opts \\ [])
+
+      def exists?(table, query, opts) when table in @tables,
+        do: Operations.exists?(query, table, opts)
+
+      def exists?(_table, _query, _opts), do: {:error, :unknown_table}
+
+      @spec get(atom(), any()) :: {:ok, map()} | {:error, any()}
+      def get(table, key) when table in @tables, do: Operations.get(key, table)
+
+      def get(_table, _key), do: {:error, :unknown_table}
+
+      @spec get!(atom(), any()) :: map()
+      def get!(table, key) when table in @tables, do: Operations.get!(key, table)
+
+      @spec get_by(atom(), map()) :: {:ok, map()} | {:error, any()}
+      def get_by(table, query) when table in @tables, do: Operations.get_by(query, table)
+
+      def get_by(_table, _query), do: {:error, :unknown_table}
+
+      @spec get_by!(atom(), map()) :: map()
+      def get_by!(table, query) when table in @tables, do: Operations.get_by!(query, table)
+
       @spec one(atom(), map() | tuple()) :: {:ok, map()} | {:error, any()}
       def one(table, query) when table in @tables, do: Operations.one(query, table)
 
       def one(_table, _query), do: {:error, :unknown_table}
+
+      @spec one!(atom(), map() | tuple()) :: map()
+      def one!(table, query) when table in @tables, do: Operations.one!(query, table)
+
+      @spec reload(map()) :: {:ok, map()} | {:error, any()}
+      def reload(%{__struct__: table} = struct) when table in @tables do
+        Operations.reload(struct, table)
+      end
+
+      def reload(_struct), do: {:error, :unknown_table}
+
+      @spec reload!(map()) :: map()
+      def reload!(%{__struct__: table} = struct) when table in @tables do
+        Operations.reload!(struct, table)
+      end
 
       def reload_seeds(table) when table in @tables do
         GenServer.call(__MODULE__, {:reload_seeds, table})
@@ -157,10 +205,13 @@ defmodule ActiveMemory.ActiveRepo do
 
       def reload_seeds(_table), do: {:error, :unknown_table}
 
-      @spec select(atom(), map() | tuple()) :: {:ok, list(map())} | {:error, any()}
-      def select(table, query) when table in @tables, do: Operations.select(query, table)
+      @spec select(atom(), map() | tuple(), keyword()) :: {:ok, list(map())} | {:error, any()}
+      def select(table, query, opts \\ [])
 
-      def select(_table, _query), do: {:error, :unknown_table}
+      def select(table, query, opts) when table in @tables,
+        do: Operations.select(query, table, opts)
+
+      def select(_table, _query, _opts), do: {:error, :unknown_table}
 
       def state do
         GenServer.call(__MODULE__, :state)

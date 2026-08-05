@@ -3,6 +3,8 @@ defmodule ActiveMemory.Adapters.Adapter do
 
   @callback all(atom()) :: list(map())
 
+  @callback count(atom()) :: non_neg_integer()
+
   @callback create_table(atom()) :: {:ok, :created | :recovered} | {:error, any()}
 
   @callback delete(map(), atom()) :: :ok | {:error, any()}
