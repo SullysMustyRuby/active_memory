@@ -320,9 +320,11 @@ defmodule MyApp.Sessions.Session do
 end
 ```
 
-`majority: true` requires a **majority of that table's replicas to be reachable before a transactional write commits**. On the losing side of a partition writes are aborted instead of accepted, so the two sides do not silently diverge.
+`majority: true` requires a **majority of that table's replicas to be reachable before a transactional write commits**. On the minority side of a partition writes are aborted instead of accepted, so the two sides do not silently diverge.
 
-**Why the default hurts.** With `majority: false`, a partition leaves every node holding a replica that happily accepts writes. Both sides diverge, and when the network heals Mnesia reports `inconsistent_database` and **stops rather than guessing** how to merge them. That is the correct conservative choice — there is no right automatic merge without knowing what the data means — but it means an operator has to intervene.
+**Why the default hurts.** With `majority: false`, each side of a partition keeps accepting writes against its own replicas. Mnesia does not merge conflicting histories, and it does not stop you from creating them. When the nodes reconnect and each has logged the other as down, Mnesia emits an `{inconsistent_database, running_partitioned_network, node}` system event — and the default handler **logs an error and carries on**, serving whichever replica a given node reads from.
+
+That is deliberate: there is no correct automatic merge without knowing what the data means. But it means divergence is not loud, and recovery is operator work — choose an authoritative replica with [`:mnesia.set_master_nodes/1,2`](https://www.erlang.org/doc/apps/mnesia/mnesia.html#set_master_nodes/1) and restart the nodes that should resynchronise from it, or restore from a backup.
 
 **What it costs.**
 - Writes on the minority side fail: availability traded for consistency.
@@ -330,9 +332,9 @@ end
 - It covers **transactional** writes. ActiveMemory's reads are dirty by design (that is what makes them fast), so a read on the minority side still returns that replica's data.
 - It is per table, so one table can opt in without changing the rest.
 
-**If that is not enough.** Quorum writes reduce divergence; they do not make Mnesia partition tolerant. If the data genuinely cannot tolerate a partition, keep the system of record in a database and treat the ActiveMemory table as derived, or use a Raft backed store such as [Khepri](https://hexdocs.pm/khepri) — built by the RabbitMQ team to replace Mnesia for exactly this reason.
+**If that is not enough.** Quorum writes reduce divergence; they do not make Mnesia partition tolerant. If the data genuinely cannot tolerate a partition, keep the system of record in a database and treat the ActiveMemory table as derived, or reach for a consensus backed store such as [Khepri](https://hexdocs.pm/khepri) when the data model suits a leader and quorum. Khepri is not a drop-in for arbitrary Mnesia tables — it is a tree structured store built for strongly consistent state, and the RabbitMQ team adopted it for their metadata rather than as a general replacement.
 
-**On a single node none of this applies.** One replica means no partition to survive, and `majority: true` costs nothing.
+**On a single node none of this applies.** The only replica is always a majority, so `majority: true` adds no availability constraint.
 
 ## Expiry (TTL)
 Give a `Table` a `ttl` (time-to-live, in milliseconds) and its records expire automatically — ideal for the one-time tokens, 2FA codes, magic links and short-lived API keys in [Potential Use Cases](#potential-use-cases).

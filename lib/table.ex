@@ -198,7 +198,7 @@ defmodule ActiveMemory.Table do
 
   #### Majority (quorum writes, and surviving a network partition)
   `[majority: true]` requires a **majority of a table's replicas to be reachable
-  before any transactional write commits**. A write on the losing side of a network
+  before any transactional write commits**. A write on the minority side of a network
   partition is aborted rather than accepted, which is the single most effective
   thing you can do about Mnesia's partition behavior. It defaults to `false`.
 
@@ -211,12 +211,19 @@ defmodule ActiveMemory.Table do
   ```
 
   ##### Why it matters
-  With the default `majority: false`, a partition leaves every node still holding a
-  replica willing to accept writes. Both sides diverge happily, and when the network
-  heals Mnesia detects the divergence, reports `inconsistent_database`, and **stops
-  rather than guessing** how to merge. That is not Mnesia being careless: there is no
-  correct automatic merge without knowing what the data means. But it does mean an
-  operator has to resolve it, and it is the reason many teams give up on Mnesia.
+  With the default `majority: false`, each side of a partition keeps accepting writes
+  against its own replicas. Mnesia does not merge conflicting histories, and it does
+  not stop you from creating them. When the nodes reconnect and each has logged the
+  other as down, Mnesia emits an
+  `{inconsistent_database, running_partitioned_network, node}` system event — and the
+  default handler **logs an error and carries on**, serving whichever replica a given
+  node reads from.
+
+  That is not carelessness: there is no correct automatic merge without knowing what
+  the data means. But it does mean divergence is not loud, and recovery is operator
+  work — choose an authoritative replica with `:mnesia.set_master_nodes/1,2` and
+  restart the nodes that should resynchronise from it, or restore from a backup. It is
+  the reason many teams give up on Mnesia.
 
   With `majority: true` the minority side refuses writes for that table, so there is
   much less to reconcile — the same trade CP systems make, and roughly what Mnesia's
@@ -235,12 +242,14 @@ defmodule ActiveMemory.Table do
   Quorum writes reduce divergence; they do not make Mnesia a partition tolerant
   database. If your data genuinely cannot tolerate a partition, the options are to
   keep the system of record in a database and treat the ActiveMemory table as
-  derived, or to use a Raft backed store such as
-  [Khepri](https://hexdocs.pm/khepri) — the store the RabbitMQ team built to replace
-  Mnesia for exactly this reason.
+  derived, or to reach for a consensus backed store such as
+  [Khepri](https://hexdocs.pm/khepri) when the data model suits a leader and quorum.
+  Khepri is not a drop-in for arbitrary Mnesia tables — it is a tree structured store
+  built for strongly consistent state, and the RabbitMQ team adopted it for their
+  metadata rather than as a general replacement.
 
-  For a single node application none of this applies: with one replica there is no
-  partition to survive, and `majority: true` costs nothing.
+  For a single node application none of this applies: the only replica is always a
+  majority, so `majority: true` adds no availability constraint.
 
   ### ETS Options
   #### Table Access
