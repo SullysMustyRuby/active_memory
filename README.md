@@ -17,7 +17,7 @@ StaffStore.select(match(:role == "admin" and :last_login < cutoff))
 TokenStore.withdraw(%{value: submitted_token})
 ```
 
-Define a `Table` with named attributes and you get typed structs you can query by **any combination of fields** — no cache keys to design, no ETS match specs to hand-write, no database round-trip. The same simple ORM interface runs on ETS or Mnesia, with built-in [record expiry (TTL)](#expiry-ttl), [crash resilience](#resilience), and [atomic take-once reads](#store-api).
+Define a `Table` with named attributes and you get typed structs you can query by **any combination of fields** — no cache keys to design, no ETS match specs to hand-write, no database round-trip. The same Ecto-flavored interface runs on ETS or Mnesia, with built-in [record expiry (TTL)](#expiry-ttl), [crash resilience](#resilience), and [atomic take-once reads](#store-api).
 
 ActiveMemory abstracts the ETS and Mnesia specifics behind a common interface called a [`Store`](#store-api), or an [`ActiveRepo`](#multiple-tables-with-an-activerepo) when you need multiple tables.
 
@@ -27,9 +27,20 @@ ActiveMemory abstracts the ETS and Mnesia specifics behind a common interface ca
 |---|---|
 | To cache computed values by key, with eviction policies and hit/miss stats | A cache: [Cachex](https://github.com/whitfin/cachex), [Nebulex](https://github.com/elixir-nebulex/nebulex) |
 | Durable, relational data | A database with [Ecto](https://github.com/elixir-ecto/ecto) |
+| Raw ETS speed with access patterns you fully control, no schema layer | [`:ets`](https://www.erlang.org/doc/apps/stdlib/ets.html) directly |
+| Shared state for services **outside** your BEAM cluster | [Redis](https://redis.io)/Valkey |
 | **Structured records in memory, queried by their attributes** | **ActiveMemory** |
 
 The sweet spot is any small-to-medium dataset you would be tempted to put in a database table but want at memory speed: one-time tokens and 2FA codes, sessions, feature flags and config, API keys, reference data. See [Potential Use Cases](#potential-use-cases).
+
+#### Why not Redis?
+If the state only exists to serve your application, a Redis round trip costs a network hop, serialization, and an infrastructure dependency — for data that could live in the same memory as the code using it. An ETS read is an in-process memory access; even localhost Redis is orders of magnitude away. Where Redis genuinely earns its place is state shared with things that are not your BEAM cluster, or state that must outlive it. For sharing *within* a cluster, a replicated Mnesia table covers many cases — see [Running on more than one node](#running-on-more-than-one-node-and-surviving-a-partition) for the trade-offs, which are real.
+
+#### Why not `:ets` directly?
+You always can — ActiveMemory is ETS/Mnesia underneath, and raw `:ets` is the right call when you control the access patterns and want zero overhead. What the schema layer buys: typed structs instead of tuples, queries on any attribute without hand-written match specs, changeset validation, TTL, a supervised lifecycle, and a table that survives its owner crashing. The cost is the translation layer on each operation; if you are counting microseconds on a hot path, measure both.
+
+#### Why not Mnesia directly (or [memento](https://github.com/sheharyarn/memento))?
+Mnesia's power comes wrapped in an API from 1999 — records, match specs, transaction ceremony — and memento wraps that nicely for Mnesia specifically. ActiveMemory gives one API across **both** backends, so a table can start on ETS and move to replicated Mnesia by changing one option, and adds what neither has built in: Ecto changeset integration, TTL expiry, and atomic take-once reads (`withdraw/1`). The Mnesia-specific options are still there when you need them — passed through, not hidden.
 
 ## Example setup
 1. Define a `Table` with attributes.
