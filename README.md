@@ -187,7 +187,7 @@ Store.all(order_by: [{:desc, :age}, :last], offset: 20, limit: 20)
 Store.select(%{cylon?: true}, order_by: :last)
 ```
 
-Neither ETS nor Mnesia can order a result, so this sorts after reading — `O(n log n)` over the matched records, not an index backed sort. Without an `:order_by` the order is whatever the table gives back, which for a `:set` table is unspecified. Values are compared with their own `compare/2` when they have one, so `Decimal`, `DateTime`, `NaiveDateTime`, `Date` and `Time` fields sort correctly rather than by Erlang term order.
+Neither ETS nor Mnesia can order a result, so this sorts after reading — `O(n log n)` over the matched records, not an index backed sort. `:limit` and `:offset` are **convenience pagination, not indexed pagination**: every matched record is read and sorted before the offset is thrown away, so `offset: 10_000, limit: 10` pays for all 10,010. Without an `:order_by` the order is whatever the table gives back, which for a `:set` table is unspecified. Values are compared with their own `compare/2` when they have one, so `Decimal`, `DateTime`, `NaiveDateTime`, `Date` and `Time` fields sort correctly rather than by Erlang term order.
 
 > **`count/1` on a `ttl` table**
 >
@@ -329,7 +329,7 @@ That is deliberate: there is no correct automatic merge without knowing what the
 **What it costs.**
 - Writes on the minority side fail: availability traded for consistency.
 - You want an **odd** number of replicas. With two, neither side of a split holds a majority and writes stop on both.
-- It covers **transactional** writes. ActiveMemory's reads are dirty by design (that is what makes them fast), so a read on the minority side still returns that replica's data.
+- It gates **updates**, not reads. ActiveMemory's Mnesia reads run in a transaction but commit nothing, so they still succeed on the minority side and return that replica's contents — which may be behind the majority's.
 - It is per table, so one table can opt in without changing the rest.
 
 **If that is not enough.** Quorum writes reduce divergence; they do not make Mnesia partition tolerant. If the data genuinely cannot tolerate a partition, keep the system of record in a database and treat the ActiveMemory table as derived, or reach for a consensus backed store such as [Khepri](https://hexdocs.pm/khepri) when the data model suits a leader and quorum. Khepri is not a drop-in for arbitrary Mnesia tables — it is a tree structured store built for strongly consistent state, and the RabbitMQ team adopted it for their metadata rather than as a general replacement.
@@ -498,6 +498,14 @@ end
 ```
 
 Check out the [documentation on hexdocs](https://hexdocs.pm/active_memory), the [Coming from Ecto](https://hexdocs.pm/active_memory/coming_from_ecto.html) guide, and the [changelog](https://hexdocs.pm/active_memory/changelog.html).
+
+### Upgrading from 0.7
+Two behavior changes in 0.8.0 can require code updates:
+
+1. **`one/1` and `withdraw/1` raise `ActiveMemory.MultipleResultsError`** when a query matches more than one record, instead of returning `{:error, :more_than_one_result}` — matching `c:Ecto.Repo.one/2`. Update any caller matching on that tuple; a query that legitimately matches many records should use `select/2`.
+2. **An Ecto schema table whose declared primary key is not its first field, or is composite, raises when the table is created.** The first field is the physical table key, so the previous behavior would have read the wrong field.
+
+See the [changelog](https://hexdocs.pm/active_memory/changelog.html) for the full list.
 
 ## Potential Use Cases
 There are many reasons to be leveraging the power of in memory store and the awesome tools of [Mnesia](https://www.erlang.org/doc/man/mnesia.html) and [ETS](https://www.erlang.org/doc/man/ets.html) in your Elixir applications.

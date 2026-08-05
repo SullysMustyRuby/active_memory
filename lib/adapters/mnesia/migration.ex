@@ -229,7 +229,9 @@ defmodule ActiveMemory.Adapters.Mnesia.Migration do
   defp log_refused({:aborted, reason}, table, change) do
     Logger.warning(
       "ActiveMemory could not #{change} for #{inspect(table)}: " <>
-        "Mnesia refused with #{inspect(reason)}. The table keeps its current setting."
+        "Mnesia refused with #{inspect(reason)}. The running table no longer matches " <>
+        "the options declared on #{inspect(table)} — it keeps its current setting. " <>
+        "Compare :mnesia.table_info(#{inspect(table)}, :all) against the table's options."
     )
 
     :ok

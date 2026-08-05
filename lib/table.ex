@@ -233,9 +233,10 @@ defmodule ActiveMemory.Table do
     - Writes on the minority side fail. Availability is traded for consistency.
     - It needs an odd number of replicas to be useful; with two replicas neither side
       of a split holds a majority, so writes stop on both.
-    - It applies to **transactional** writes. Mnesia dirty operations bypass the
-      check, and ActiveMemory's reads are dirty by design (that is what makes them
-      fast), so a read on the minority side still returns that replica's data.
+    - It gates **updates**, not reads, and dirty operations bypass it entirely.
+      ActiveMemory's Mnesia reads run inside a transaction but commit nothing, so
+      they still succeed on the minority side and return that replica's contents,
+      which may be behind the majority's.
     - It is per table, so a table can opt in without changing the rest.
 
   ##### If you need more than this

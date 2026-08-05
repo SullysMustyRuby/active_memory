@@ -48,12 +48,16 @@ defmodule ActiveMemory.Operations do
   Count the records in `table` without reading them.
 
   The count comes from the table itself (`:ets.info/2`, `:mnesia.table_info/2`), so
-  it is O(1) and does not copy records out of the table.
+  it is O(1) and does not copy records out of the table. It is the size of the
+  backend table, not a count of records matching any application level rule:
 
-  On a table with a `ttl` that number includes records that have expired but have
-  not been swept yet, so it can exceed what the reads return. Pass `sweep: true` to
-  delete the expired records first and get a count that matches the reads, at the
-  cost of a full pass over the table.
+    - On a table with a `ttl` it includes records that have expired but have not been
+      swept yet, so it can exceed what the reads return. Pass `sweep: true` to delete
+      those first and get a count that agrees with the reads, at the cost of a full
+      pass over the table.
+    - On a replicated Mnesia table it is the size of the replica this node reads from.
+      Nodes whose replicas have diverged — see the `majority` option in
+      `ActiveMemory.Table` — will report different counts.
   """
   @spec count(atom(), keyword()) :: non_neg_integer()
   def count(table, opts \\ []) do
@@ -130,10 +134,10 @@ defmodule ActiveMemory.Operations do
   @doc """
   Whether any record in `table` matches the query.
 
-  Unlike `count/2` this has to look at the records, because a query is matched
-  against their fields, so it costs a scan. Accepts `sweep: true` to reclaim
-  expired records first; the answer itself is unaffected, since reads already
-  ignore an expired record.
+  Unlike `count/2` this is a scan, not an indexed lookup: a query has to be matched
+  against every record's fields. It is a convenience over `select/3`, not a cheap
+  existence check. Accepts `sweep: true` to reclaim expired records first; the answer
+  itself is unaffected, since reads already ignore an expired record.
   """
   @spec exists?(map() | tuple(), atom(), keyword()) :: boolean()
   def exists?(query, table, opts \\ []) do
@@ -327,6 +331,9 @@ defmodule ActiveMemory.Operations do
 
   Neither ETS nor Mnesia can order a result for us, so this sorts in the caller
   after reading — `O(n log n)` over the matched records, not an index backed sort.
+  `:limit` and `:offset` are convenience pagination, not indexed pagination: every
+  matched record is read and sorted first, and the offset records are then thrown
+  away, so `offset: 10_000, limit: 10` pays for all 10,010.
 
   Options:
     - `:order_by` a field, `{:asc | :desc, field}`, or a list of either to break ties

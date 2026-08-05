@@ -93,7 +93,9 @@ Store.all(order_by: {:desc, :inserted_at}, limit: 20)
 ```
 
 Sorting happens after reading — neither backend can order a result — so it is
-`O(n log n)` over the matched records, not an index backed sort.
+`O(n log n)` over the matched records, not an index backed sort. `:limit` and
+`:offset` are convenience pagination rather than the indexed pagination a database
+gives you: every matched record is read and sorted before the offset is discarded.
 
 ### `write/1` is an upsert, not insert-or-update
 

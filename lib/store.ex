@@ -44,9 +44,12 @@ defmodule ActiveMemory.Store do
   `count/1` asks the table for its size (`:ets.info/2`, `:mnesia.table_info/2`), so
   it is O(1) and never copies records out — unlike `length(all())`.
 
-  On a table with a `ttl` that number includes records that have expired but have
-  not been swept yet, so it can exceed what the reads return. Pass `sweep: true` to
-  delete those first and get a count that agrees with the reads:
+  It is the size of the backend table, not a count under application level rules. On
+  a table with a `ttl` it includes records that have expired but have not been swept
+  yet, so it can exceed what the reads return; pass `sweep: true` to delete those
+  first and get a count that agrees with the reads. On a replicated Mnesia table it
+  is the size of the replica this node reads from, so nodes whose replicas have
+  diverged report different counts.
 
   ```elixir
   MyApp.Tokens.Store.count()               # O(1), may include expired records
@@ -67,9 +70,11 @@ defmodule ActiveMemory.Store do
   ```
 
   Neither ETS nor Mnesia can order a result, so this sorts after reading —
-  `O(n log n)` over the matched records, not an index backed sort. Without an
-  `:order_by` the order is whatever the table returns, which for a `:set` table is
-  unspecified.
+  `O(n log n)` over the matched records, not an index backed sort. `:limit` and
+  `:offset` are **convenience pagination, not indexed pagination**: every matched
+  record is read and sorted before the offset is thrown away, so
+  `offset: 10_000, limit: 10` pays for all 10,010. Without an `:order_by` the order
+  is whatever the table returns, which for a `:set` table is unspecified.
 
   Values are compared with their own `compare/2` when they have one, so `Decimal`,
   `DateTime`, `NaiveDateTime`, `Date` and `Time` fields sort correctly instead of by
