@@ -451,11 +451,22 @@ The following Repo is a demo application using ActiveMemory and MnesiaManager co
 - [MnesiaManager](https://github.com/SullysMustyRuby/ActiveMemoryManager)
 
 ## Planned Enhancements
-- Allow pass through `:ets` and `mnesia` options for table creation
-- Allow pass through `:ets` and `mnesia` syntax for searches
-- Mnesia co-ordination with Docker instance for backup and disk persistance
-- Enhance `match` query syntax
-  - Select option for certain fields
-  - Group results
+
+### 0.9.0 — safe to keep
+0.8.0 made ActiveMemory easy to start; 0.9.0 makes it safe to keep — under concurrent tests, growing tables, and concurrent writers.
+
+- **Test isolation.** A sandbox (`ActiveMemory.Test`) so suites that touch a store can run `async: true`. Today every store is a named singleton over a globally named table, which forces `async: false` — the first friction a Phoenix team hits.
+- **Secondary indexes the reads use.** Attribute queries are full scans today, and the Mnesia `index:` option builds indexes no read path consults — writes pay for maintenance, reads get nothing. Shadow index tables for ETS, `:mnesia.index_read/3` for Mnesia, so querying by attribute stays fast as tables grow. Also what makes `order_by` and pagination affordable.
+- **`update/1` and atomic counters.** `write/1` is a whole-record upsert, so concurrent field updates are last-write-wins and `updated_at` never refreshes. An `update/1` that requires the record to exist, plus an `update_counter`-style atomic increment (`:ets.update_counter/3`) — which unlocks rate limiting as a use case.
+- **Telemetry.** `[:active_memory, :write | :one | :select | :withdraw]` events with duration, table, and result, so the usual observability tooling can see the library.
+- **Introspection and memory bounds.** `Store.info/0` (record count, memory bytes) and a documented story for tables that grow unbounded — today a `ttl` is the only limit.
+- **Cluster tests in CI.** The distributed migration tests are currently excluded; `local_cluster` 2.x (`:peer` based) makes running them cheap. Includes fixing the `create_table` retry loop when a configured replica node is permanently unreachable, and partition tests documenting behavior with and without `majority: true`.
+
+### Exploring
+Ideas under consideration once 0.9.0 lands — feedback welcome:
+
+- A replicated, partition-safe backend (Raft based, e.g. [Khepri](https://hexdocs.pm/khepri)) alongside ETS and Mnesia, for tables that must stay consistent across nodes.
+- Reactive reads — subscribe to changes on a table without polling.
+- Write-behind sync to an external store (a database or Redis) for durability and cold starts, keeping reads at memory speed.
 
 Any suggestions appreciated.
