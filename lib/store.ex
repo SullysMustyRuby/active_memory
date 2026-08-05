@@ -3,13 +3,82 @@ defmodule ActiveMemory.Store do
   # The Store
 
   ## Store API
-    - `Store.all/0` Get all records stored
+    - `Store.all/1` Get all records stored, optionally ordered and paged (see [Ordering and paging](#module-ordering-and-paging))
+    - `Store.count/1` Count the records stored, without reading them (see [Counting](#module-counting))
     - `Store.delete/1` Delete the record provided, matched in full (see [Deleting a record](#module-deleting-a-record))
     - `Store.delete_all/0` Delete all records stored
-    - `Store.one/1` Get one record matching either an attributes search or `match` query
-    - `Store.select/1` Get all records matching either an attributes search or `match` query
+    - `Store.exists?/2` Whether any record matches an attributes search or `match` query
+    - `Store.get/1` Get the record with the given primary key, or `{:error, :not_found}`
+    - `Store.get!/1` Like `get/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.get_by/1` Get the single record matching an attributes search
+    - `Store.get_by!/1` Like `get_by/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.one/1` Get one record matching either an attributes search or `match` query. Raises `ActiveMemory.MultipleResultsError` when several match
+    - `Store.one!/1` Like `one/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.reload/1` Re-read a record from the table by its primary key
+    - `Store.reload!/1` Like `reload/1` but raises `ActiveMemory.NotFoundError`
+    - `Store.select/2` Get all records matching either an attributes search or `match` query, optionally ordered and paged
     - `Store.withdraw/1` **Atomically** get one record matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
-    - `Store.write/1` Write a record into the memory table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
+    - `Store.write/1` Write a record into the memory table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `c:Ecto.Repo.insert/2`
+
+  ## Reading a single record
+  `get/1` reads by primary key — the table's first field, which is what ETS and
+  Mnesia key a record on. That is `:uuid` on a table using
+  `auto_generate_uuid: true`, an Ecto schema's declared primary key, or simply the
+  first field declared.
+
+  ```elixir
+  {:ok, person} = MyApp.People.Store.get(uuid)
+  person = MyApp.People.Store.get!(uuid)          # raises ActiveMemory.NotFoundError
+  {:ok, person} = MyApp.People.Store.get_by(%{email: "kara@galactica.com"})
+  ```
+
+  A query that is meant to find one record but matches several raises
+  `ActiveMemory.MultipleResultsError` from `one/1`, `one!/1`, `get_by/1` and
+  `get_by!/1`, as `c:Ecto.Repo.one/2` does. Use `select/2` when many records are
+  expected.
+
+  Because reads and writes match a record in full, a struct held across a change
+  goes stale; `reload/1` gets the current copy.
+
+  ## Counting
+  `count/1` asks the table for its size (`:ets.info/2`, `:mnesia.table_info/2`), so
+  it is O(1) and never copies records out — unlike `length(all())`.
+
+  It is the size of the backend table, not a count under application level rules. On
+  a table with a `ttl` it includes records that have expired but have not been swept
+  yet, so it can exceed what the reads return; pass `sweep: true` to delete those
+  first and get a count that agrees with the reads. On a replicated Mnesia table it
+  is the size of the replica this node reads from, so nodes whose replicas have
+  diverged report different counts.
+
+  ```elixir
+  MyApp.Tokens.Store.count()               # O(1), may include expired records
+  MyApp.Tokens.Store.count(sweep: true)    # sweeps first, then counts
+  ```
+
+  `exists?/2` has to match a query against fields, so it costs a scan rather than
+  being O(1). It accepts `sweep: true` as well, though the answer never depends on
+  it, since reads already ignore an expired record.
+
+  ## Ordering and paging
+  `all/1` and `select/2` take `:order_by`, `:limit` and `:offset`:
+
+  ```elixir
+  MyApp.People.Store.all(order_by: :last, limit: 20)
+  MyApp.People.Store.all(order_by: [{:desc, :age}, :last], offset: 20, limit: 20)
+  MyApp.People.Store.select(%{cylon?: true}, order_by: :last)
+  ```
+
+  Neither ETS nor Mnesia can order a result, so this sorts after reading —
+  `O(n log n)` over the matched records, not an index backed sort. `:limit` and
+  `:offset` are **convenience pagination, not indexed pagination**: every matched
+  record is read and sorted before the offset is thrown away, so
+  `offset: 10_000, limit: 10` pays for all 10,010. Without an `:order_by` the order
+  is whatever the table returns, which for a `:set` table is unspecified.
+
+  Values are compared with their own `compare/2` when they have one, so `Decimal`,
+  `DateTime`, `NaiveDateTime`, `Date` and `Time` fields sort correctly instead of by
+  Erlang term order, which compares those structs field by field.
 
   ## Deleting a record
   `delete/1` removes an **exact** record match: the struct you pass is compared
@@ -157,8 +226,11 @@ defmodule ActiveMemory.Store do
         end
       end
 
-      @spec all() :: list(map())
-      def all, do: Operations.all(@table)
+      @spec all(keyword()) :: list(map())
+      def all(opts \\ []), do: Operations.all(@table, opts)
+
+      @spec count(keyword()) :: non_neg_integer()
+      def count(opts \\ []), do: Operations.count(@table, opts)
 
       def create_table, do: Operations.create_table(@table)
 
@@ -168,15 +240,39 @@ defmodule ActiveMemory.Store do
       @spec delete_all() :: :ok | {:error, any()}
       def delete_all, do: Operations.delete_all(@table)
 
+      @spec exists?(map() | tuple(), keyword()) :: boolean()
+      def exists?(query, opts \\ []), do: Operations.exists?(query, @table, opts)
+
+      @spec get(any()) :: {:ok, map()} | {:error, any()}
+      def get(key), do: Operations.get(key, @table)
+
+      @spec get!(any()) :: map()
+      def get!(key), do: Operations.get!(key, @table)
+
+      @spec get_by(map()) :: {:ok, map()} | {:error, any()}
+      def get_by(query), do: Operations.get_by(query, @table)
+
+      @spec get_by!(map()) :: map()
+      def get_by!(query), do: Operations.get_by!(query, @table)
+
       @spec one(map() | list(any())) :: {:ok, map()} | {:error, any()}
       def one(query), do: Operations.one(query, @table)
+
+      @spec one!(map() | list(any())) :: map()
+      def one!(query), do: Operations.one!(query, @table)
+
+      @spec reload(map()) :: {:ok, map()} | {:error, any()}
+      def reload(struct), do: Operations.reload(struct, @table)
+
+      @spec reload!(map()) :: map()
+      def reload!(struct), do: Operations.reload!(struct, @table)
 
       def reload_seeds do
         GenServer.call(__MODULE__, :reload_seeds)
       end
 
-      @spec select(map() | list(any())) :: {:ok, list(map())} | {:error, any()}
-      def select(query), do: Operations.select(query, @table)
+      @spec select(map() | list(any()), keyword()) :: {:ok, list(map())} | {:error, any()}
+      def select(query, opts \\ []), do: Operations.select(query, @table, opts)
 
       def state do
         GenServer.call(__MODULE__, :state)

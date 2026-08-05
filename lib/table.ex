@@ -59,7 +59,7 @@ defmodule ActiveMemory.Table do
   Types are not enforced on `write/1` — ETS and Mnesia store any term — they exist
   to power `Ecto.Changeset` casting and validation, which works directly on the
   table struct. `write/1` accepts the changeset itself, the way
-  `Ecto.Repo.insert/1` does:
+  `c:Ecto.Repo.insert/2` does:
 
   ```elixir
   {:ok, planet} =
@@ -123,14 +123,39 @@ defmodule ActiveMemory.Table do
 
   ### Record Expiry (`ttl`)
   Pass a `ttl` (time-to-live, in milliseconds) to give every record in the table a
-  lifetime. A `ttl` adds an `expires_at` field to the schema (appended last, so it
-  never becomes the table key) and stamps it on each write as `now + ttl`.
+  lifetime. Expiry is tracked in an `expires_at` field holding milliseconds since
+  the epoch, stamped on each write as `now + ttl`.
 
   ```elixir
   use ActiveMemory.Table,
     type: :ets,
     ttl: :timer.hours(1)
   ```
+
+  In an `attributes` block the field is added for you, appended last so it never
+  becomes the table key.
+
+  **An Ecto schema table must declare it explicitly**, because ActiveMemory does not
+  add fields to a schema you wrote — the schema stays the single description of the
+  record, exactly as Ecto treats it:
+
+  ```elixir
+  defmodule MyApp.Token do
+    use ActiveMemory.Table, type: :ets, ttl: :timer.minutes(15)
+
+    use Ecto.Schema
+
+    @primary_key {:uuid, Ecto.UUID, autogenerate: true}
+    embedded_schema do
+      field :value, :string
+      field :expires_at, :integer
+    end
+  end
+  ```
+
+  Declare it last, so it does not take the key position, and type it `:integer`. A
+  `ttl` table without an `expires_at` field would silently never expire, so the
+  table raises when it is created instead.
 
   Expiry is enforced in two complementary ways (see `ActiveMemory.Store` and
   `ActiveMemory.ActiveRepo`): reads never return an expired record, and the owning
@@ -171,9 +196,61 @@ defmodule ActiveMemory.Table do
   The load order priority is by default 0 (zero) but can be set to any integer. The tables with the highest load order priority are loaded first at startup.
   If you need to change the load order use the following syntax: `[load_order: 2]`
 
-  #### Majority
-  If true, any (non-dirty) update to the table is aborted, unless a majority of the table replicas are available for the commit. When used on a fragmented table, all fragments are given the same the same majority setting.
-  If you need to modify the majority use the following syntax: `[majority: true]`
+  #### Majority (quorum writes, and surviving a network partition)
+  `[majority: true]` requires a **majority of a table's replicas to be reachable
+  before any transactional write commits**. A write on the minority side of a network
+  partition is aborted rather than accepted, which is the single most effective
+  thing you can do about Mnesia's partition behavior. It defaults to `false`.
+
+  ```elixir
+  use ActiveMemory.Table,
+    options: [
+      majority: true,
+      ram_copies: [:"node1@host", :"node2@host", :"node3@host"]
+    ]
+  ```
+
+  ##### Why it matters
+  With the default `majority: false`, each side of a partition keeps accepting writes
+  against its own replicas. Mnesia does not merge conflicting histories, and it does
+  not stop you from creating them. When the nodes reconnect and each has logged the
+  other as down, Mnesia emits an
+  `{inconsistent_database, running_partitioned_network, node}` system event — and the
+  default handler **logs an error and carries on**, serving whichever replica a given
+  node reads from.
+
+  That is not carelessness: there is no correct automatic merge without knowing what
+  the data means. But it does mean divergence is not loud, and recovery is operator
+  work — choose an authoritative replica with `:mnesia.set_master_nodes/1,2` and
+  restart the nodes that should resynchronise from it, or restore from a backup. It is
+  the reason many teams give up on Mnesia.
+
+  With `majority: true` the minority side refuses writes for that table, so there is
+  much less to reconcile — the same trade CP systems make, and roughly what Mnesia's
+  `pause_minority` strategy does at the node level.
+
+  ##### What it costs
+    - Writes on the minority side fail. Availability is traded for consistency.
+    - It needs an odd number of replicas to be useful; with two replicas neither side
+      of a split holds a majority, so writes stop on both.
+    - It gates **updates**, not reads, and dirty operations bypass it entirely.
+      ActiveMemory's Mnesia reads run inside a transaction but commit nothing, so
+      they still succeed on the minority side and return that replica's contents,
+      which may be behind the majority's.
+    - It is per table, so a table can opt in without changing the rest.
+
+  ##### If you need more than this
+  Quorum writes reduce divergence; they do not make Mnesia a partition tolerant
+  database. If your data genuinely cannot tolerate a partition, the options are to
+  keep the system of record in a database and treat the ActiveMemory table as
+  derived, or to reach for a consensus backed store such as
+  [Khepri](https://hexdocs.pm/khepri) when the data model suits a leader and quorum.
+  Khepri is not a drop-in for arbitrary Mnesia tables — it is a tree structured store
+  built for strongly consistent state, and the RabbitMQ team adopted it for their
+  metadata rather than as a general replacement.
+
+  For a single node application none of this applies: the only replica is always a
+  majority, so `majority: true` adds no availability constraint.
 
   ### ETS Options
   #### Table Access
@@ -324,6 +401,34 @@ defmodule ActiveMemory.Table do
   # primary key, while `:autogenerate` holds every other autogenerating field (a
   # custom type such as `Ecto.UUID`, and `timestamps()`). Both are honored, as the
   # specs Ecto itself uses: `{fields, {module, function, args}}`.
+  # ETS and Mnesia key a record on its first field, so that field is the primary
+  # key regardless of what an Ecto schema declares. A declared key anywhere else
+  # would silently read the wrong field, and a composite key cannot be expressed
+  # at all, so both are rejected.
+  def __primary_key__(module, declared, fields) do
+    first = hd(fields)
+
+    case declared do
+      [] ->
+        first
+
+      [^first] ->
+        first
+
+      [elsewhere] ->
+        raise ArgumentError,
+              "#{inspect(module)} declares #{inspect(elsewhere)} as its primary key but " <>
+                "#{inspect(first)} is the first field, and the first field is the table key. " <>
+                "Declare the primary key first, or use `@primary_key false`."
+
+      [_ | _] = composite ->
+        raise ArgumentError,
+              "#{inspect(module)} declares a composite primary key #{inspect(composite)}, " <>
+                "which an in memory table cannot express. Use a single key field."
+    end
+  end
+
+  @doc false
   def __autogenerate__(nil, autogenerate), do: autogenerate
 
   def __autogenerate__({field, _source, type}, autogenerate)
@@ -397,6 +502,16 @@ defmodule ActiveMemory.Table do
           unquote(adapter)
         )
       end
+
+      # The table key is the first stored field, so a schema whose declared primary
+      # key sits elsewhere would make `get/1` read the wrong field.
+      def __attributes__(:primary_key),
+        do:
+          ActiveMemory.Table.__primary_key__(
+            __MODULE__,
+            __schema__(:primary_key),
+            __schema__(:fields)
+          )
 
       def __attributes__(:query_fields), do: __schema__(:fields)
 
@@ -472,6 +587,10 @@ defmodule ActiveMemory.Table do
         def __attributes__(:auto_generate_uuid), do: unquote(Macro.escape(@auto_generate_uuid))
 
         def __attributes__(:autogenerate), do: unquote(Macro.escape(autogenerate))
+
+        # The first attribute is the table key: `auto_generate_uuid: true` puts
+        # `:uuid` there, otherwise it is the first field declared.
+        def __attributes__(:primary_key), do: unquote(hd(query_fields))
 
         def __attributes__(:match_head),
           do:

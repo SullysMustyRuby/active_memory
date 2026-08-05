@@ -17,6 +17,7 @@ defmodule ActiveMemory.TableHeir do
 
   @name __MODULE__
 
+  @doc false
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: @name)
   end

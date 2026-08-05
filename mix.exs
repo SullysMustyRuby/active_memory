@@ -32,7 +32,12 @@ defmodule ActiveMemory.MixProject do
       docs: [
         main: @name,
         canonical: "https://hexdocs.pm/#{@app}",
-        extras: ["README.md"]
+        extras: [
+          "README.md",
+          "guides/coming_from_ecto.md": [title: "Coming from Ecto"],
+          "CHANGELOG.md": [title: "Changelog"]
+        ],
+        groups_for_extras: [Guides: ~r/guides\//]
       ],
       aliases: [
         test: "test --no-start"
@@ -49,8 +54,9 @@ defmodule ActiveMemory.MixProject do
   end
 
   defp description do
-    "The typed, attribute-queryable in-memory store for ETS and Mnesia. " <>
-      "A simple ORM with record expiry (TTL), crash resilience, and atomic take-once reads."
+    "The typed, attribute-queryable in-memory store for ETS and Mnesia, " <>
+      "with Ecto changeset support, record expiry (TTL), crash resilience, " <>
+      "and atomic take-once reads."
   end
 
   # Run "mix help deps" to learn about dependencies.
@@ -59,7 +65,7 @@ defmodule ActiveMemory.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0"},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
-      {:local_cluster, "~> 1.2", only: [:test]}
+      {:local_cluster, "~> 2.1", only: [:test]}
     ]
   end
 
@@ -68,7 +74,7 @@ defmodule ActiveMemory.MixProject do
       name: @app,
       maintainers: [@author],
       licenses: [@license],
-      files: ~w(mix.exs lib README.md),
+      files: ~w(mix.exs lib guides README.md CHANGELOG.md),
       links: %{"Github" => @github}
     ]
   end

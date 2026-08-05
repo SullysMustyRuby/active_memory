@@ -28,6 +28,16 @@ defmodule ActiveMemory.Adapters.Mnesia do
   end
 
   @doc """
+  Count the records stored in a table without reading them.
+  ```elixir
+    iex:> PeopleStore.count()
+    10
+  ```
+  """
+  @spec count(atom()) :: non_neg_integer()
+  def count(table), do: :mnesia.table_info(table, :size)
+
+  @doc """
   Create a table in Mnesia using an ActiveMemory.Table.
   This function will take in the ActiveMemory.Table and parse
   the options for the table.

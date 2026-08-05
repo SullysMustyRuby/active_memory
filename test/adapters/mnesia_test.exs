@@ -116,9 +116,10 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert PeopleStore.one(%{first: "tiberious", last: "kirk"}) == {:error, :not_found}
     end
 
-    test "returns error when more than one record" do
-      assert PeopleStore.one(%{hair_color: "brown", cylon?: false}) ==
-               {:error, :more_than_one_result}
+    test "raises when more than one record matches" do
+      assert_raise ActiveMemory.MultipleResultsError, ~r/expected at most one record/, fn ->
+        PeopleStore.one(%{hair_color: "brown", cylon?: false})
+      end
     end
 
     test "returns error when bad keys are in the query" do
@@ -159,9 +160,10 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert PeopleStore.one(query) == {:error, :not_found}
     end
 
-    test "returns error when more than one record" do
+    test "raises when more than one record matches" do
       query = match(:hair_color == "brown" and :cylon? == false)
-      assert PeopleStore.one(query) == {:error, :more_than_one_result}
+
+      assert_raise ActiveMemory.MultipleResultsError, fn -> PeopleStore.one(query) end
     end
   end
 
@@ -298,9 +300,10 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert PeopleStore.withdraw(%{first: "tiberious", last: "kirk"}) == {:error, :not_found}
     end
 
-    test "returns error when more than one record" do
-      assert PeopleStore.withdraw(%{hair_color: "brown", cylon?: false}) ==
-               {:error, :more_than_one_result}
+    test "raises when more than one record matches" do
+      assert_raise ActiveMemory.MultipleResultsError, fn ->
+        PeopleStore.withdraw(%{hair_color: "brown", cylon?: false})
+      end
     end
 
     test "returns error when bad keys are in the query" do
@@ -345,9 +348,10 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert PeopleStore.withdraw(query) == {:error, :not_found}
     end
 
-    test "returns error when more than one record" do
+    test "raises when more than one record matches" do
       query = match(:hair_color == "brown" and :cylon? == false)
-      assert PeopleStore.withdraw(query) == {:error, :more_than_one_result}
+
+      assert_raise ActiveMemory.MultipleResultsError, fn -> PeopleStore.withdraw(query) end
     end
   end
 

@@ -32,16 +32,32 @@ defmodule ActiveMemory.ActiveRepo do
   behavior; only the arities differ. Reads and `withdraw` take the table module as
   the first argument, while `write` and `delete` infer the table from the struct (or
   from a changeset's data).
-    - `ActiveRepo.all/1` Get all records stored in a table
+    - `ActiveRepo.all/2` Get all records stored in a table, optionally ordered and paged
+    - `ActiveRepo.count/2` Count the records in a table, without reading them
     - `ActiveRepo.delete/1` Delete the record provided, matched in full (see [Deleting a record](#module-deleting-a-record))
     - `ActiveRepo.delete_all/1` Delete all records stored in a table
-    - `ActiveRepo.one/2` Get one record from a table matching either an attributes search or `match` query
-    - `ActiveRepo.select/2` Get all records from a table matching either an attributes search or `match` query
+    - `ActiveRepo.exists?/3` Whether any record in a table matches an attributes search or `match` query
+    - `ActiveRepo.get/2` Get the record with the given primary key, or `{:error, :not_found}`
+    - `ActiveRepo.get!/2` Like `get/2` but raises `ActiveMemory.NotFoundError`
+    - `ActiveRepo.get_by/2` Get the single record in a table matching an attributes search
+    - `ActiveRepo.get_by!/2` Like `get_by/2` but raises `ActiveMemory.NotFoundError`
+    - `ActiveRepo.one/2` Get one record from a table matching either an attributes search or `match` query. Raises `ActiveMemory.MultipleResultsError` when several match
+    - `ActiveRepo.one!/2` Like `one/2` but raises `ActiveMemory.NotFoundError`
+    - `ActiveRepo.reload/1` Re-read a record by its primary key, inferring the table
+    - `ActiveRepo.reload!/1` Like `reload/1` but raises `ActiveMemory.NotFoundError`
+    - `ActiveRepo.select/3` Get all records from a table matching either an attributes search or `match` query, optionally ordered and paged
     - `ActiveRepo.withdraw/2` **Atomically** get one record from a table matching either an attributes search or `match` query, delete the record and return it — exactly one concurrent caller wins, making it safe for take-once workloads
-    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `Ecto.Repo.insert/1`
+    - `ActiveRepo.write/1` Write a record into its table, from a struct or an `Ecto.Changeset`. An invalid changeset is returned as `{:error, changeset}` with its `action` set to `:insert`, exactly like `c:Ecto.Repo.insert/2`
 
   An operation for a struct or table that is not part of the `ActiveRepo` returns
   `{:error, :unknown_table}`.
+
+  ## Reading, counting, ordering
+  These behave exactly as they do on a `ActiveMemory.Store`, which documents them in
+  full: [reading a single record](`ActiveMemory.Store`), counting, and ordering with
+  `:order_by`/`:limit`/`:offset`. `get/2` reads by the table's primary key (its first
+  field), `count/2` is O(1) and takes `sweep: true` on a `ttl` table, and `reload/1`
+  infers its table from the struct as `write/1` and `delete/1` do.
 
   ## Deleting a record
   `delete/1` removes an **exact** record match: the struct you pass is compared
@@ -129,10 +145,19 @@ defmodule ActiveMemory.ActiveRepo do
         end
       end
 
-      @spec all(atom()) :: list(map()) | {:error, :unknown_table}
-      def all(table) when table in @tables, do: Operations.all(table)
+      @spec all(atom(), keyword()) :: list(map()) | {:error, :unknown_table}
+      def all(table, opts \\ [])
 
-      def all(_table), do: {:error, :unknown_table}
+      def all(table, opts) when table in @tables, do: Operations.all(table, opts)
+
+      def all(_table, _opts), do: {:error, :unknown_table}
+
+      @spec count(atom(), keyword()) :: non_neg_integer() | {:error, :unknown_table}
+      def count(table, opts \\ [])
+
+      def count(table, opts) when table in @tables, do: Operations.count(table, opts)
+
+      def count(_table, _opts), do: {:error, :unknown_table}
 
       @spec delete(map()) :: :ok | {:error, any()}
       def delete(%{__struct__: table} = struct) when table in @tables do
@@ -146,10 +171,49 @@ defmodule ActiveMemory.ActiveRepo do
 
       def delete_all(_table), do: {:error, :unknown_table}
 
+      @spec exists?(atom(), map() | tuple(), keyword()) :: boolean() | {:error, :unknown_table}
+      def exists?(table, query, opts \\ [])
+
+      def exists?(table, query, opts) when table in @tables,
+        do: Operations.exists?(query, table, opts)
+
+      def exists?(_table, _query, _opts), do: {:error, :unknown_table}
+
+      @spec get(atom(), any()) :: {:ok, map()} | {:error, any()}
+      def get(table, key) when table in @tables, do: Operations.get(key, table)
+
+      def get(_table, _key), do: {:error, :unknown_table}
+
+      @spec get!(atom(), any()) :: map()
+      def get!(table, key) when table in @tables, do: Operations.get!(key, table)
+
+      @spec get_by(atom(), map()) :: {:ok, map()} | {:error, any()}
+      def get_by(table, query) when table in @tables, do: Operations.get_by(query, table)
+
+      def get_by(_table, _query), do: {:error, :unknown_table}
+
+      @spec get_by!(atom(), map()) :: map()
+      def get_by!(table, query) when table in @tables, do: Operations.get_by!(query, table)
+
       @spec one(atom(), map() | tuple()) :: {:ok, map()} | {:error, any()}
       def one(table, query) when table in @tables, do: Operations.one(query, table)
 
       def one(_table, _query), do: {:error, :unknown_table}
+
+      @spec one!(atom(), map() | tuple()) :: map()
+      def one!(table, query) when table in @tables, do: Operations.one!(query, table)
+
+      @spec reload(map()) :: {:ok, map()} | {:error, any()}
+      def reload(%{__struct__: table} = struct) when table in @tables do
+        Operations.reload(struct, table)
+      end
+
+      def reload(_struct), do: {:error, :unknown_table}
+
+      @spec reload!(map()) :: map()
+      def reload!(%{__struct__: table} = struct) when table in @tables do
+        Operations.reload!(struct, table)
+      end
 
       def reload_seeds(table) when table in @tables do
         GenServer.call(__MODULE__, {:reload_seeds, table})
@@ -157,10 +221,13 @@ defmodule ActiveMemory.ActiveRepo do
 
       def reload_seeds(_table), do: {:error, :unknown_table}
 
-      @spec select(atom(), map() | tuple()) :: {:ok, list(map())} | {:error, any()}
-      def select(table, query) when table in @tables, do: Operations.select(query, table)
+      @spec select(atom(), map() | tuple(), keyword()) :: {:ok, list(map())} | {:error, any()}
+      def select(table, query, opts \\ [])
 
-      def select(_table, _query), do: {:error, :unknown_table}
+      def select(table, query, opts) when table in @tables,
+        do: Operations.select(query, table, opts)
+
+      def select(_table, _query, _opts), do: {:error, :unknown_table}
 
       def state do
         GenServer.call(__MODULE__, :state)
