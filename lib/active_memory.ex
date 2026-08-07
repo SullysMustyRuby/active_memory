@@ -2,19 +2,25 @@ defmodule ActiveMemory do
   @moduledoc """
   The typed, attribute-queryable in memory store for ETS and Mnesia.
 
-  A key/value cache answers one question: *what is the value for this key?*
-  ActiveMemory answers the questions a cache cannot — records are found by their
-  **attributes**, in any combination, with no cache keys to design and no ETS match
+  In most applications, a huge share of database load is reads of data that barely
+  changes: reference data, configuration, authorization, catalog data. ActiveMemory
+  exists to take that load off the database — load those tables into memory once at
+  boot, serve every read *for those tables* from RAM, and write back only when
+  something actually changes. A cache with no cache to manage: no keys to design,
+  no cold misses, no invalidation dance. The in-memory copy serves the reads, while
+  the database remains the durable source of truth.
+
+  Records are found by their **attributes**, in any combination, with no ETS match
   specifications to hand write:
 
   ```elixir
-  SessionStore.select(%{user_id: user_id, active?: true})
-  StaffStore.select(match(:role == "admin" and :last_login < cutoff))
+  AdminStore.one(%{email: email, active?: true})
+  ProductStore.select(%{category: "electronics", in_stock?: true})
   TokenStore.withdraw(%{value: submitted_token})
   ```
 
-  The same interface runs on `:ets` or `:mnesia`, with record expiry, crash
-  resilience and atomic take-once reads built in.
+  The same interface runs on `:ets` or `:mnesia`, with boot-time seeding, record
+  expiry, crash resilience and atomic take-once reads built in.
 
   ## The pieces
 
@@ -101,9 +107,10 @@ defmodule ActiveMemory do
 
   ## When to reach for it
 
-  ActiveMemory suits a small-to-medium dataset you would be tempted to put in a
-  database table but want at memory speed: one time tokens, sessions, feature flags
-  and config, API keys, reference data.
+  ActiveMemory suits a small-to-medium dataset that is read constantly but changes
+  rarely — reference data, configuration, admin users and permissions, products and
+  plans — plus short-lived records that benefit from `ttl` and `withdraw/1`, like
+  one time tokens and 2FA codes.
 
   It is **not** a system of record. ETS lives and dies with the node, and Mnesia
   persists only with `disc_copies`; keep durable data in a database. For caching
