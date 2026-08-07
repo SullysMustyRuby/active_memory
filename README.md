@@ -4,20 +4,26 @@
 
 ## Overview 
 
-A key/value cache answers one question: *"what is the value for this key?"* ActiveMemory answers the questions a cache cannot:
+In most applications, a huge share of database load is reads of data that barely changes: **reference data** (countries, currencies, tax tables), **configuration** (feature flags, plans, tenant settings), **authorization** (admin users, roles, permissions), and **catalog data** (products, pricing, shipping classes). Every request re-asks the database questions whose answers changed last Tuesday.
+
+ActiveMemory exists to take that load off the database: load those tables into memory **once at boot**, serve every read *for those tables* from RAM, and write back only when something actually changes. For those datasets the database simply disappears from the hot request path, and the connection pool is freed for queries that earn their round trip.
+
+It's a cache with no cache to manage — no keys to design, no TTLs on data that shouldn't expire, no cold misses, no invalidation dance. The in-memory copy serves the reads, while the database remains the durable source of truth.
+
+The reason plain ETS isn't enough is that this data gets read by **attribute**, not by key:
 
 ```elixir
-# every active session for a user
-SessionStore.select(%{user_id: user_id, active?: true})
+# auth check that used to hit the database on every request
+AdminStore.one(%{email: email, active?: true})
 
-# admins who have not logged in since the cutoff
-StaffStore.select(match(:role == "admin" and :last_login < cutoff))
+# product lookups, by any combination of fields
+ProductStore.select(%{category: "electronics", in_stock?: true})
 
 # atomically claim a one-time token — exactly one concurrent caller wins
 TokenStore.withdraw(%{value: submitted_token})
 ```
 
-Define a `Table` with named attributes and you get typed structs you can query by **any combination of fields** — no cache keys to design, no ETS match specs to hand-write, no database round-trip. The same Ecto-flavored interface runs on ETS or Mnesia, with built-in [record expiry (TTL)](#expiry-ttl), [crash resilience](#resilience), and [atomic take-once reads](#store-api).
+Define a `Table` and you get typed structs queryable by any combination of fields — no ETS match specs to hand-write. And since 0.8.0 a table can literally be an Ecto `embedded_schema` that happens to live entirely in memory: the same Ecto-flavored interface runs on ETS or Mnesia, with built-in [boot-time seeding](#seeding), [record expiry (TTL)](#expiry-ttl), [crash resilience](#resilience), and [atomic take-once reads](#store-api).
 
 ActiveMemory abstracts the ETS and Mnesia specifics behind a common interface called a [`Store`](#store-api), or an [`ActiveRepo`](#multiple-tables-with-an-activerepo) when you need multiple tables.
 
@@ -31,7 +37,7 @@ ActiveMemory abstracts the ETS and Mnesia specifics behind a common interface ca
 | Shared state for services **outside** your BEAM cluster | [Redis](https://redis.io)/Valkey |
 | **Structured records in memory, queried by their attributes** | **ActiveMemory** |
 
-The sweet spot is any small-to-medium dataset you would be tempted to put in a database table but want at memory speed: one-time tokens and 2FA codes, sessions, feature flags and config, API keys, reference data. See [Potential Use Cases](#potential-use-cases).
+The sweet spot is any small-to-medium dataset that is read constantly but changes rarely — reference data, configuration, authorization, catalog data — plus short-lived records that benefit from TTL and atomic take-once reads, like one-time tokens and 2FA codes. See [Potential Use Cases](#potential-use-cases).
 
 #### Why not Redis?
 If the state only exists to serve your application, a Redis round trip costs a network hop, serialization, and an infrastructure dependency — for data that could live in the same memory as the code using it. An ETS read is an in-process memory access; even localhost Redis is orders of magnitude away. Where Redis genuinely earns its place is state shared with things that are not your BEAM cluster, or state that must outlive it. For sharing *within* a cluster, a replicated Mnesia table covers many cases — see [Running on more than one node](#running-on-more-than-one-node-and-surviving-a-partition) for the trade-offs, which are real.
@@ -519,7 +525,13 @@ Two behavior changes in 0.8.0 can require code updates:
 See the [changelog](https://hexdocs.pm/active_memory/changelog.html) for the full list.
 
 ## Potential Use Cases
-There are many reasons to be leveraging the power of in memory store and the awesome tools of [Mnesia](https://www.erlang.org/doc/man/mnesia.html) and [ETS](https://www.erlang.org/doc/man/ets.html) in your Elixir applications.
+The common thread: data that is expensive to keep asking the database for, but changes rarely enough that a resident in-memory copy makes sense. Several of these are hit on **every authenticated request** — roles and permissions, tenant settings, feature flags, plan entitlements — and can account for multiple database queries before an application starts its real work.
+
+### Products, plans, and reference data
+Catalog data (products, SKUs, pricing tiers, shipping classes), subscription plans and their entitlements, and static reference tables (countries, currencies, tax codes) are read on nearly every request and change on human timescales. Load them from the database at boot with a `before_init` function, serve every lookup from memory, and write back through the store when they change.
+
+### Admin users, roles, and permissions
+Authorization data is checked constantly and edited rarely. Keep admins, role mappings, and permission matrices in a store so auth checks never queue for a database connection.
 
 ### Storing config settings and Application secrets
 Instead of having hard coded secrets and application settings crowding your config files store them in an in memory table. Provide your application a small UI to support the secrets and settings and you can update while the application is running in a matter of seconds.
@@ -533,13 +545,10 @@ For applications which have a fixed set of API Keys or a relativly small set of 
 ### JWT Encryption Keys
 Applications using JWT's can store the keys in an `ActiveMemory.Store` and provide fast access for encrypting JWT's and fast access for publishing the public keys on an endpoint for token verification by consuming clients.
 
-### Admin User Management
-Create an `ActiveMemory.Store` to manage your admins easily and safely. 
-
 **and many many many more...**
 
 ## Demo Application
-A demo application built on the current release — showing one-time tokens with `withdraw/1` and `ttl`, sessions, and feature flags — is in progress and will be linked here. Until then, the [Coming from Ecto](https://hexdocs.pm/active_memory/coming_from_ecto.html) guide has complete, current examples.
+A demo application built on the current release — showing catalog data served from memory instead of the database, one-time tokens with `withdraw/1` and `ttl`, and feature flags — is in progress and will be linked here. Until then, the [Coming from Ecto](https://hexdocs.pm/active_memory/coming_from_ecto.html) guide has complete, current examples.
 
 ## Planned Enhancements
 
