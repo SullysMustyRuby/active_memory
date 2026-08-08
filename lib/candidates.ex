@@ -44,6 +44,7 @@ defmodule ActiveMemory.Candidates do
 
   @default_min_ratio 10
   @default_max_rows 50_000
+  @default_min_reads 100
 
   @postgres_sql """
   SELECT relname,
@@ -94,6 +95,10 @@ defmodule ActiveMemory.Candidates do
       (default #{@default_min_ratio}; ten times that is a strong candidate)
     - `:max_rows` — above this a table is `:too_large` for the in-memory sweet
       spot regardless of its ratio (default #{@default_max_rows})
+    - `:min_reads` — below this many total operations a table's ratio carries no
+      signal (one stray read of an untouched table is an infinite ratio), so it
+      is reported as having too little traffic to judge
+      (default #{@default_min_reads})
 
   Results are sorted candidates first, then by reads.
   """
@@ -101,6 +106,7 @@ defmodule ActiveMemory.Candidates do
   def analyze(rows, opts \\ []) do
     min_ratio = Keyword.get(opts, :min_ratio, @default_min_ratio)
     max_rows = Keyword.get(opts, :max_rows, @default_max_rows)
+    min_reads = Keyword.get(opts, :min_reads, @default_min_reads)
 
     rows
     |> Enum.map(fn [table, row_count, bytes, reads, writes] ->
@@ -117,7 +123,15 @@ defmodule ActiveMemory.Candidates do
         reads: reads,
         writes: writes,
         ratio: ratio,
-        verdict: verdict(to_string(table), ratio, row_count, reads, writes, min_ratio, max_rows)
+        verdict:
+          verdict(
+            to_string(table),
+            ratio,
+            row_count,
+            reads,
+            writes,
+            {min_ratio, max_rows, min_reads}
+          )
       }
     end)
     |> Enum.sort_by(fn %{verdict: verdict, reads: reads} -> {rank(verdict), -reads} end)
@@ -190,11 +204,10 @@ defmodule ActiveMemory.Candidates do
 
   defp infrastructure?(table), do: Enum.any?(@infrastructure, &Regex.match?(&1, table))
 
-  defp verdict(_table, _ratio, _rows, 0, 0, _min_ratio, _max_rows), do: :no_traffic
-
-  defp verdict(table, ratio, rows, _reads, _writes, min_ratio, max_rows) do
+  defp verdict(table, ratio, rows, reads, writes, {min_ratio, max_rows, min_reads}) do
     cond do
       infrastructure?(table) -> :infrastructure
+      reads + writes < min_reads -> :no_traffic
       rows > max_rows -> :too_large
       ratio == :infinity -> :strong
       ratio >= min_ratio * 10 -> :strong
@@ -215,7 +228,7 @@ defmodule ActiveMemory.Candidates do
   defp label(:too_large), do: "too large to pin in memory"
   defp label(:write_heavy), do: "write heavy"
   defp label(:infrastructure), do: "infrastructure (queue/migrations)"
-  defp label(:no_traffic), do: "no traffic recorded"
+  defp label(:no_traffic), do: "not enough traffic to judge"
 
   defp format_ratio(:infinity), do: "inf"
   defp format_ratio(ratio) when ratio >= 100, do: "#{round(ratio)}:1"

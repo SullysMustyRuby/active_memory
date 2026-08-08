@@ -48,6 +48,17 @@ defmodule ActiveMemory.CandidatesTest do
                Candidates.analyze([["archived", 10, 8192, 0, 0]])
     end
 
+    test "a stray read of an untouched table carries no signal" do
+      # From a real dev database: one incidental read gives an infinite ratio,
+      # which would have called 35 idle tables strong candidates.
+      assert [%{verdict: :no_traffic}] =
+               Candidates.analyze([["b4b_rentals", 0, 8192, 1, 0]])
+
+      # tunable: with the floor lowered, the same table classifies on its ratio
+      assert [%{verdict: :strong}] =
+               Candidates.analyze([["b4b_rentals", 0, 8192, 1, 0]], min_reads: 1)
+    end
+
     test "zero reads with some writes is write heavy, not a divide error" do
       assert [%{verdict: :write_heavy, ratio: +0.0}] =
                Candidates.analyze([["audit_log", 100, 8192, 0, 500]])
@@ -94,7 +105,7 @@ defmodule ActiveMemory.CandidatesTest do
     test "sorts candidates first, then by reads" do
       rows = [
         @events,
-        ["countries", 249, 65_536, 90, 0],
+        ["countries", 249, 65_536, 900, 0],
         @plans,
         ["stale", 5, 8192, 0, 0]
       ]

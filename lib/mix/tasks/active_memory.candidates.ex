@@ -22,6 +22,9 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
       ten times this is a strong candidate)
     * `--max-rows` — tables above this row count are flagged as too large for the
       in-memory sweet spot (default 50000)
+    * `--min-reads` — tables with fewer total operations than this are reported
+      as having too little traffic to judge, since a stray read of an untouched
+      table would otherwise look infinitely read-heavy (default 100)
 
   ## Safe against production
 
@@ -57,7 +60,7 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
   def run(args) do
     {opts, _argv, _invalid} =
       OptionParser.parse(args,
-        strict: [repo: :keep, min_ratio: :integer, max_rows: :integer],
+        strict: [repo: :keep, min_ratio: :integer, max_rows: :integer, min_reads: :integer],
         aliases: [r: :repo]
       )
 
@@ -70,7 +73,7 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
         result = repo.query!(sql, [], log: false)
 
         result.rows
-        |> Candidates.analyze(Keyword.take(opts, [:min_ratio, :max_rows]))
+        |> Candidates.analyze(Keyword.take(opts, [:min_ratio, :max_rows, :min_reads]))
         |> Candidates.render()
         |> Mix.shell().info()
 
