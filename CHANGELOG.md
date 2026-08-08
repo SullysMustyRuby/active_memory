@@ -4,6 +4,17 @@ All notable changes to ActiveMemory are documented here. Versions follow
 [Semantic Versioning](https://semver.org); while the package is pre-1.0 a minor
 bump may carry a behavior change, and those are called out below.
 
+## Unreleased
+
+### Added
+
+- `mix active_memory.candidates` — reads table statistics through the
+  application's own Ecto repo (PostgreSQL via `pg_stat_user_tables`,
+  MySQL/MariaDB via `performance_schema`) and reports each table's read/write
+  ratio, row count and size, flagging the high-read, low-write tables that are
+  candidates for an ActiveMemory table. Thresholds are tunable with
+  `--min-ratio` and `--max-rows`.
+
 ## 0.8.0
 
 Ecto compatibility. A `Table` can now be typed or defined as an Ecto schema, and
