@@ -103,6 +103,10 @@ defmodule ActiveMemory.Candidates do
 
     rows
     |> Enum.map(fn [table, row_count, bytes, reads, writes] ->
+      row_count = to_int(row_count)
+      bytes = to_int(bytes)
+      reads = to_int(reads)
+      writes = to_int(writes)
       ratio = ratio(reads, writes)
 
       %__MODULE__{
@@ -117,6 +121,13 @@ defmodule ActiveMemory.Candidates do
     end)
     |> Enum.sort_by(fn %{verdict: verdict, reads: reads} -> {rank(verdict), -reads} end)
   end
+
+  # Postgres returns these columns as integers, but MySQL promotes sums of its
+  # unsigned bigint counters to DECIMAL, so MyXQL delivers Decimal structs.
+  defp to_int(%Decimal{} = decimal), do: decimal |> Decimal.round(0) |> Decimal.to_integer()
+  defp to_int(integer) when is_integer(integer), do: integer
+  defp to_int(float) when is_float(float), do: round(float)
+  defp to_int(nil), do: 0
 
   @doc """
   Render analyzed results as a text report.

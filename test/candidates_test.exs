@@ -53,6 +53,32 @@ defmodule ActiveMemory.CandidatesTest do
                Candidates.analyze([["audit_log", 100, 8192, 0, 500]])
     end
 
+    test "normalizes the Decimal values MyXQL returns for MySQL's counters" do
+      # MySQL promotes sums of BIGINT UNSIGNED counters to DECIMAL, so every
+      # numeric column can arrive as a Decimal rather than an integer. Shapes
+      # taken from a run against a real Aurora MySQL staging database.
+      rows = [
+        [
+          "accounts",
+          Decimal.new(120),
+          Decimal.new("221184"),
+          Decimal.new("50000"),
+          Decimal.new("3")
+        ],
+        ["events", Decimal.new(0), Decimal.new("0"), Decimal.new("0"), Decimal.new("0")]
+      ]
+
+      assert [accounts, events] = Candidates.analyze(rows)
+
+      assert %{verdict: :strong, rows: 120, bytes: 221_184, reads: 50_000, writes: 3} = accounts
+      assert %{verdict: :no_traffic} = events
+
+      # rendering must not crash on the normalized values
+      report = Candidates.render([accounts, events])
+      assert report =~ "50,000"
+      assert report =~ "216 KB"
+    end
+
     test "sorts candidates first, then by reads" do
       rows = [
         @events,
