@@ -23,6 +23,14 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
     * `--max-rows` — tables above this row count are flagged as too large for the
       in-memory sweet spot (default 50000)
 
+  ## Safe against production
+
+  The task runs two read-only `SELECT`s against the database's statistics views,
+  and it does **not** start your application — only its configuration is loaded
+  and the one repo you name is started, with a small pool. Nothing else connects:
+  no other repos, no job processors, no endpoints. Use read-only credentials
+  anyway; they cost nothing.
+
   ## Reading the report
 
   Statistics are cumulative — since the last statistics reset on PostgreSQL, since
@@ -39,7 +47,11 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
 
   alias ActiveMemory.Candidates
 
-  @requirements ["app.start"]
+  # Deliberately `app.config`, not `app.start`: the application is NOT booted,
+  # only its configuration is loaded and the one repo is started. Pointing this
+  # task at a production database must not also point Oban, background jobs and
+  # every other repo pool at it.
+  @requirements ["app.config"]
 
   @impl Mix.Task
   def run(args) do
@@ -55,7 +67,7 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
 
     case Candidates.sql_for(adapter) do
       {:ok, sql} ->
-        result = repo.query!(sql)
+        result = repo.query!(sql, [], log: false)
 
         result.rows
         |> Candidates.analyze(Keyword.take(opts, [:min_ratio, :max_rows]))
@@ -82,9 +94,14 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
     end
   end
 
-  # `app.start` boots a supervised repo; a repo outside the supervision tree
-  # (scripts, some release setups) still needs starting to be queried.
+  # The application is not started, so the adapter's applications (postgrex or
+  # myxql, db_connection) and the repo itself are started here, with a minimal
+  # pool. `already_started` is tolerated for callers running inside an app.
   defp ensure_started(repo) do
+    # :ecto runs the Repo.Registry every repo registers with on start
+    {:ok, _ecto} = Application.ensure_all_started(:ecto)
+    {:ok, _apps} = repo.__adapter__().ensure_all_started(repo.config(), :temporary)
+
     case repo.start_link(pool_size: 2) do
       {:ok, _pid} -> :ok
       {:error, {:already_started, _pid}} -> :ok
@@ -97,7 +114,9 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
   # statistics have never been reset); MySQL counters start at server start.
   defp stats_window_note(repo, Ecto.Adapters.Postgres) do
     case repo.query!(
-           "SELECT stats_reset FROM pg_stat_database WHERE datname = current_database()"
+           "SELECT stats_reset FROM pg_stat_database WHERE datname = current_database()",
+           [],
+           log: false
          ) do
       %{rows: [[%DateTime{} = reset]]} ->
         "Statistics are cumulative since #{DateTime.to_iso8601(reset)}. " <>
