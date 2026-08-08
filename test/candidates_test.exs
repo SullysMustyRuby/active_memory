@@ -79,6 +79,18 @@ defmodule ActiveMemory.CandidatesTest do
       assert report =~ "216 KB"
     end
 
+    test "queue and migration tables are infrastructure, not candidates" do
+      # From a real staging run: an idle Oban polls its queue constantly and
+      # enqueues nothing, which looks like a strong candidate by the numbers.
+      rows = [
+        ["oban_jobs", 0, 32_768, 31_329, 0],
+        ["oban_peers", 1, 16_384, 2209, 1485],
+        ["phoenix_schema_migrations", 7, 16_384, 35, 7]
+      ]
+
+      assert Enum.all?(Candidates.analyze(rows), &(&1.verdict == :infrastructure))
+    end
+
     test "sorts candidates first, then by reads" do
       rows = [
         @events,

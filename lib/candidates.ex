@@ -38,7 +38,8 @@ defmodule ActiveMemory.Candidates do
           reads: non_neg_integer(),
           writes: non_neg_integer(),
           ratio: float() | :infinity,
-          verdict: :strong | :candidate | :too_large | :write_heavy | :no_traffic
+          verdict:
+            :strong | :candidate | :too_large | :write_heavy | :infrastructure | :no_traffic
         }
 
   @default_min_ratio 10
@@ -116,7 +117,7 @@ defmodule ActiveMemory.Candidates do
         reads: reads,
         writes: writes,
         ratio: ratio,
-        verdict: verdict(ratio, row_count, reads, writes, min_ratio, max_rows)
+        verdict: verdict(to_string(table), ratio, row_count, reads, writes, min_ratio, max_rows)
       }
     end)
     |> Enum.sort_by(fn %{verdict: verdict, reads: reads} -> {rank(verdict), -reads} end)
@@ -182,10 +183,18 @@ defmodule ActiveMemory.Candidates do
   defp ratio(_reads, 0), do: :infinity
   defp ratio(reads, writes), do: reads / writes
 
-  defp verdict(_ratio, _rows, 0, 0, _min_ratio, _max_rows), do: :no_traffic
+  # Job queues and migration bookkeeping can look read-heavy — a queue poller
+  # reads constantly, and an idle database shows no enqueues — but they are the
+  # database's working state, not data an application should pin in memory.
+  @infrastructure [~r/^oban_/, ~r/schema_migrations$/]
 
-  defp verdict(ratio, rows, _reads, _writes, min_ratio, max_rows) do
+  defp infrastructure?(table), do: Enum.any?(@infrastructure, &Regex.match?(&1, table))
+
+  defp verdict(_table, _ratio, _rows, 0, 0, _min_ratio, _max_rows), do: :no_traffic
+
+  defp verdict(table, ratio, rows, _reads, _writes, min_ratio, max_rows) do
     cond do
+      infrastructure?(table) -> :infrastructure
       rows > max_rows -> :too_large
       ratio == :infinity -> :strong
       ratio >= min_ratio * 10 -> :strong
@@ -198,12 +207,14 @@ defmodule ActiveMemory.Candidates do
   defp rank(:candidate), do: 1
   defp rank(:too_large), do: 2
   defp rank(:write_heavy), do: 3
-  defp rank(:no_traffic), do: 4
+  defp rank(:infrastructure), do: 4
+  defp rank(:no_traffic), do: 5
 
   defp label(:strong), do: "** strong candidate"
   defp label(:candidate), do: "*  candidate"
   defp label(:too_large), do: "too large to pin in memory"
   defp label(:write_heavy), do: "write heavy"
+  defp label(:infrastructure), do: "infrastructure (queue/migrations)"
   defp label(:no_traffic), do: "no traffic recorded"
 
   defp format_ratio(:infinity), do: "inf"
