@@ -547,6 +547,23 @@ Applications using JWT's can store the keys in an `ActiveMemory.Store` and provi
 
 **and many many many more...**
 
+### Find the candidates in your own app
+You don't have to guess which tables fit: your database already keeps the numbers. `mix active_memory.candidates` reads them through your application's own Ecto repo (PostgreSQL and MySQL/MariaDB) and reports every table's read/write ratio and size:
+
+```bash
+mix active_memory.candidates
+```
+
+```text
+table    rows   size    reads    writes  ratio    verdict
+----------------------------------------------------------------
+plans    20     32 KB   182,340  14      13024:1  ** strong candidate
+country  249    128 KB  98,220   0       inf      ** strong candidate
+users    98,113 220 MB  530,001  98,200  5.4:1    write heavy
+```
+
+Statistics are cumulative, so run it against a database that has seen production-like traffic. Thresholds are tunable with `--min-ratio` and `--max-rows`; see `mix help active_memory.candidates`.
+
 ## Demo Application
 A demo application built on the current release — showing catalog data served from memory instead of the database, one-time tokens with `withdraw/1` and `ttl`, and feature flags — is in progress and will be linked here. Until then, the [Coming from Ecto](https://hexdocs.pm/active_memory/coming_from_ecto.html) guide has complete, current examples.
 
