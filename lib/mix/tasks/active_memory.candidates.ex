@@ -25,14 +25,18 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
     * `--min-reads` — tables with fewer total operations than this are reported
       as having too little traffic to judge, since a stray read of an untouched
       table would otherwise look infinitely read-heavy (default 100)
+    * `--timeout` — query timeout in milliseconds, for schemas so large the
+      statistics views themselves are slow (default is the repo's own timeout)
 
   ## Safe against production
 
-  The task runs two read-only `SELECT`s against the database's statistics views,
-  and it does **not** start your application — only its configuration is loaded
-  and the one repo you name is started, with a small pool. Nothing else connects:
-  no other repos, no job processors, no endpoints. Use read-only credentials
-  anyway; they cost nothing.
+  The task performs only read-only queries against the database's statistics
+  views — it never touches application tables — and it does **not** start your
+  application: only its configuration is loaded, and the one repo you name is
+  started with a two connection pool. Nothing else connects: no other repos, no
+  job processors, no endpoints. Use read-only credentials anyway; they cost
+  nothing. The expected impact is the connections themselves plus a few
+  statistics queries.
 
   ## Reading the report
 
@@ -60,7 +64,13 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
   def run(args) do
     {opts, _argv, _invalid} =
       OptionParser.parse(args,
-        strict: [repo: :keep, min_ratio: :integer, max_rows: :integer, min_reads: :integer],
+        strict: [
+          repo: :keep,
+          min_ratio: :integer,
+          max_rows: :integer,
+          min_reads: :integer,
+          timeout: :integer
+        ],
         aliases: [r: :repo]
       )
 
@@ -68,16 +78,18 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
     ensure_started(repo)
     adapter = repo.__adapter__()
 
+    query_opts = [log: false] ++ Keyword.take(opts, [:timeout])
+
     case Candidates.sql_for(adapter) do
       {:ok, sql} ->
-        result = repo.query!(sql, [], log: false)
+        result = repo.query!(sql, [], query_opts)
 
         result.rows
         |> Candidates.analyze(Keyword.take(opts, [:min_ratio, :max_rows, :min_reads]))
         |> Candidates.render()
         |> Mix.shell().info()
 
-        Mix.shell().info(stats_window_note(repo, adapter))
+        Mix.shell().info(stats_window_note(repo, adapter, query_opts))
 
       {:error, message} ->
         Mix.raise(message)
@@ -115,11 +127,11 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
   # Cumulative statistics only mean something over a known window, so tell the
   # reader when theirs began. Postgres records a reset time (NULL when the
   # statistics have never been reset); MySQL counters start at server start.
-  defp stats_window_note(repo, Ecto.Adapters.Postgres) do
+  defp stats_window_note(repo, Ecto.Adapters.Postgres, query_opts) do
     case repo.query!(
            "SELECT stats_reset FROM pg_stat_database WHERE datname = current_database()",
            [],
-           log: false
+           query_opts
          ) do
       %{rows: [[%DateTime{} = reset]]} ->
         "Statistics are cumulative since #{DateTime.to_iso8601(reset)}. " <>
@@ -131,7 +143,7 @@ defmodule Mix.Tasks.ActiveMemory.Candidates do
     end
   end
 
-  defp stats_window_note(_repo, _adapter) do
+  defp stats_window_note(_repo, _adapter, _query_opts) do
     "Statistics are cumulative since the database server started. " <>
       "Run against production-like traffic for meaningful ratios."
   end
