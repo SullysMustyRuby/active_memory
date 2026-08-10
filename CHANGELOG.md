@@ -4,7 +4,7 @@ All notable changes to ActiveMemory are documented here. Versions follow
 [Semantic Versioning](https://semver.org); while the package is pre-1.0 a minor
 bump may carry a behavior change, and those are called out below.
 
-## Unreleased
+## 0.8.1
 
 ### Added
 
@@ -13,7 +13,24 @@ bump may carry a behavior change, and those are called out below.
   MySQL/MariaDB via `performance_schema`) and reports each table's read/write
   ratio, row count and size, flagging the high-read, low-write tables that are
   candidates for an ActiveMemory table. Thresholds are tunable with
-  `--min-ratio` and `--max-rows`.
+  `--min-ratio`, `--max-rows` and `--min-reads`, and `--timeout` covers schemas
+  whose statistics views are slow to answer.
+
+  The task does **not** start your application: only its configuration is
+  loaded, and the one repo you name is started with a two connection pool, so
+  it is safe to point at a production database with read-only credentials. It
+  runs only read-only queries against statistics views, never application
+  tables. Known infrastructure tables (job queues, migration bookkeeping) are
+  reported as such rather than as candidates, and tables with too little
+  recorded traffic are not judged at all.
+
+  Validated against PostgreSQL and against a production Aurora MySQL database.
+
+### Changed
+
+- ActiveMemory now requires Elixir 1.15 or later, matching the versions CI
+  tests against. Earlier Elixirs may continue to work but are no longer
+  resolved for or verified.
 
 ## 0.8.0
 
