@@ -200,7 +200,7 @@ defmodule ActiveMemory.Candidates do
   # Job queues and migration bookkeeping can look read-heavy — a queue poller
   # reads constantly, and an idle database shows no enqueues — but they are the
   # database's working state, not data an application should pin in memory.
-  @infrastructure [~r/^oban_/, ~r/schema_migrations$/]
+  @infrastructure [~r/^oban_/, ~r/schema_migrations$/, ~r/^ar_internal_metadata$/]
 
   defp infrastructure?(table), do: Enum.any?(@infrastructure, &Regex.match?(&1, table))
 

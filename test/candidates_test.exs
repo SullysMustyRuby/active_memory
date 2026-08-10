@@ -96,7 +96,8 @@ defmodule ActiveMemory.CandidatesTest do
       rows = [
         ["oban_jobs", 0, 32_768, 31_329, 0],
         ["oban_peers", 1, 16_384, 2209, 1485],
-        ["phoenix_schema_migrations", 7, 16_384, 35, 7]
+        ["phoenix_schema_migrations", 7, 16_384, 35, 7],
+        ["ar_internal_metadata", 0, 16_384, 200, 1]
       ]
 
       assert Enum.all?(Candidates.analyze(rows), &(&1.verdict == :infrastructure))
