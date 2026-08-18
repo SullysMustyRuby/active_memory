@@ -195,6 +195,16 @@ defmodule ActiveMemory.Store do
 
   @default_sweep_interval :timer.seconds(60)
 
+  @doc false
+  defmacro __before_compile__(_env) do
+    # The catch-all must compile after any handle_info clauses the using module
+    # defines. Injected at the `use` site it would sit above them and swallow
+    # every custom message (timer ticks, monitors) without a trace.
+    quote generated: true do
+      def handle_info(_message, state), do: {:noreply, state}
+    end
+  end
+
   defmacro __using__(opts) do
     quote do
       import unquote(__MODULE__)
@@ -308,7 +318,9 @@ defmodule ActiveMemory.Store do
         {:noreply, state}
       end
 
-      def handle_info(_message, state), do: {:noreply, state}
+      # The unknown-message catch-all is injected via __before_compile__ so it
+      # lands after any handle_info clauses the using module defines.
+      @before_compile ActiveMemory.Store
 
       # A recovered table already holds its data, so seeding is skipped to avoid
       # duplicating or clobbering the surviving records.

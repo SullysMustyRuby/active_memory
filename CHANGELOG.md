@@ -4,6 +4,19 @@ All notable changes to ActiveMemory are documented here. Versions follow
 [Semantic Versioning](https://semver.org); while the package is pre-1.0 a minor
 bump may carry a behavior change, and those are called out below.
 
+## 0.8.2
+
+### Fixed
+
+- `use ActiveMemory.Store` and `use ActiveMemory.ActiveRepo` no longer swallow
+  the using module's own `handle_info` clauses. The injected unknown-message
+  catch-all is now added via `@before_compile` — after user-defined clauses —
+  instead of at the `use` site above them, where it made every custom clause
+  unreachable: timer ticks and monitor messages sent to a store were silently
+  discarded, and Elixir 1.19's type checker flags the dead clauses as
+  redundant. Library-owned messages (`:sweep`, `:"ETS-TRANSFER"`) keep
+  priority; unknown messages still no-op.
+
 ## 0.8.1
 
 ### Added
