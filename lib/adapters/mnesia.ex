@@ -131,8 +131,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   @spec one(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
   def one(query_map, table) when is_map(query_map) do
     with {:ok, query} <- MatchGuards.build(table, query_map),
-         match_query <- Tuple.insert_at(query, 0, table),
-         {:atomic, record} when length(record) == 1 <- match_object(match_query) do
+         {:atomic, record} when length(record) == 1 <- read_map_query(query, table) do
       {:ok, to_struct(hd(record), table)}
     else
       {:atomic, []} -> {:error, :not_found}
@@ -168,8 +167,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   @spec select(map() | tuple(), atom()) :: {:ok, list(map())} | {:error, any()}
   def select(query_map, table) when is_map(query_map) do
     with {:ok, query} <- MatchGuards.build(table, query_map),
-         match_query <- Tuple.insert_at(query, 0, table),
-         {:atomic, records} when is_list(records) <- match_object(match_query) do
+         {:atomic, records} when is_list(records) <- read_map_query(query, table) do
       {:ok, to_struct(records, table)}
     else
       {:atomic, []} -> {:ok, []}
@@ -201,8 +199,7 @@ defmodule ActiveMemory.Adapters.Mnesia do
   @spec withdraw(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
   def withdraw(query_map, table) when is_map(query_map) do
     with {:ok, query} <- MatchGuards.build(table, query_map),
-         match_query <- Tuple.insert_at(query, 0, table),
-         {:atomic, {:ok, record}} <- withdraw_match_object(match_query, table) do
+         {:atomic, {:ok, record}} <- withdraw_map_query(query, table) do
       {:ok, to_struct(record, table)}
     else
       {:atomic, {:error, message}} -> {:error, message}
@@ -247,6 +244,28 @@ defmodule ActiveMemory.Adapters.Mnesia do
       :mnesia.match_object(query)
     end)
   end
+
+  # A map query with no guards keeps using match_object so Mnesia can use the
+  # table's indexes. Values that need an exact-match guard go through select.
+  defp read_map_query({pattern, []}, table),
+    do: match_object(Tuple.insert_at(pattern, 0, table))
+
+  defp read_map_query({pattern, guards}, table),
+    do: select_object(map_match_spec(pattern, guards, table), table)
+
+  defp withdraw_map_query({pattern, []}, table),
+    do: withdraw_match_object(Tuple.insert_at(pattern, 0, table), table)
+
+  defp withdraw_map_query({pattern, guards}, table) do
+    match_spec = map_match_spec(pattern, guards, table)
+
+    :mnesia.transaction(fn ->
+      delete_matched(:mnesia.select(table, match_spec, :write), table)
+    end)
+  end
+
+  defp map_match_spec(pattern, guards, table),
+    do: [{Tuple.insert_at(pattern, 0, table), guards, [:"$_"]}]
 
   defp select_object(match_spec, table) do
     :mnesia.transaction(fn ->

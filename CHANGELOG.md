@@ -4,6 +4,25 @@ All notable changes to ActiveMemory are documented here. Versions follow
 [Semantic Versioning](https://semver.org); while the package is pre-1.0 a minor
 bump may carry a behavior change, and those are called out below.
 
+## Unreleased
+
+### Security
+
+- Query values are now always compared as values. Map queries placed values
+  straight into an ETS/Mnesia match pattern, where `:_` and atoms like `:"$1"`
+  are wildcards and a map matches any map holding its keys, so
+  `one(%{token: :_})` could return, and `withdraw/1` could delete, a record the
+  caller never named. `match/1` queries put values into guards unwrapped, where
+  an atom such as `:"$2"` read another field. Values that are safe as literals
+  stay in the pattern, so key and index lookups are unchanged; any other value
+  is bound to its field and compared with `=:=` against `{:const, value}`. The
+  ETS `withdraw/1` delete now matches the withdrawn record exactly as well.
+
+### Changed
+
+- A map value in a map query now matches only an equal map, not any map that
+  contains its keys.
+
 ## 0.8.2
 
 ### Fixed

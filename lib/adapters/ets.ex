@@ -172,8 +172,8 @@ defmodule ActiveMemory.Adapters.Ets do
   @spec withdraw(map() | tuple(), atom()) :: {:ok, map()} | {:error, any()}
   def withdraw(query, table) do
     with {:ok, struct} <- one(query, table),
-         ets_tuple <- to_tuple(struct),
-         count when count >= 1 <- :ets.select_delete(table, [{ets_tuple, [], [true]}]) do
+         {pattern, guards} <- MatchGuards.exact(to_tuple(struct)),
+         count when count >= 1 <- :ets.select_delete(table, [{pattern, guards, [true]}]) do
       {:ok, struct}
     else
       0 -> {:error, :not_found}
@@ -218,8 +218,8 @@ defmodule ActiveMemory.Adapters.Ets do
     end
   end
 
-  defp match_query(query, table) do
-    :ets.match_object(table, query)
+  defp match_query({pattern, guards}, table) do
+    :ets.select(table, [{pattern, guards, [:"$_"]}])
   end
 
   defp recover_table(table) do
