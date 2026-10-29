@@ -93,6 +93,25 @@ defmodule ActiveMemory.Query.EscapingTest do
 
       assert {:ok, [%Dog{name: "gem"}]} = DogStore.select(match(:nested == value))
     end
+
+    # A match query finds exactly one record, so these isolate the delete step: the
+    # withdrawn record's own values must not widen what gets deleted.
+    test "withdraw deletes only the record whose key is a map" do
+      key = %{id: 1}
+      {:ok, _} = DogStore.write(%Dog{name: key, breed: "Map"})
+      {:ok, _} = DogStore.write(%Dog{name: %{id: 1, extra: 2}, breed: "Map"})
+
+      assert {:ok, %Dog{name: ^key}} = DogStore.withdraw(match(:name == key))
+      assert {:ok, [%Dog{name: %{id: 1, extra: 2}}]} = DogStore.select(%{breed: "Map"})
+    end
+
+    test "withdraw deletes only the record whose key is :_" do
+      {:ok, _} = DogStore.write(%Dog{name: :_, breed: "Wild"})
+      {:ok, _} = DogStore.write(%Dog{name: "other", breed: "Wild"})
+
+      assert {:ok, %Dog{name: :_}} = DogStore.withdraw(match(:name == :_))
+      assert {:ok, [%Dog{name: "other"}]} = DogStore.select(%{breed: "Wild"})
+    end
   end
 
   describe "mnesia map queries" do
