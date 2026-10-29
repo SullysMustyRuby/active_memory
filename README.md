@@ -522,7 +522,7 @@ by adding `active_memory` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:active_memory, "~> 0.8.0"}
+    {:active_memory, "~> 0.9.0"}
   ]
 end
 ```
