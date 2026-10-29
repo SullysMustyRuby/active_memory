@@ -2,6 +2,7 @@ defmodule ActiveMemory.ActiveRepoTest do
   use ExUnit.Case, async: false
 
   import ActiveMemory.Query
+  import ExUnit.CaptureLog
 
   alias ActiveMemory.TableHeir
   alias Test.Support.Multi.Gadget
@@ -45,6 +46,26 @@ defmodule ActiveMemory.ActiveRepoTest do
     def fail, do: {:error, :no_source}
 
     def after_fail, do: send(:active_memory_repo_test, :after_fail_ran)
+  end
+
+  defmodule RecoveringTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule RecoveringRepo do
+    use ActiveMemory.ActiveRepo,
+      tables: [{ActiveMemory.ActiveRepoTest.RecoveringTable, before_init: [{:warm, []}]}]
+
+    def warm do
+      case :persistent_term.get({__MODULE__, :fail}, false) do
+        true -> {:error, :no_source}
+        false -> :ok
+      end
+    end
   end
 
   setup_all do
@@ -133,6 +154,31 @@ defmodule ActiveMemory.ActiveRepoTest do
 
       assert {:error, {:before_init, :fail, :no_source}} = FailingInitRepo.start_link()
       refute_received :after_fail_ran
+    end
+
+    test "with a before_init method that fails while recovering a table" do
+      Process.flag(:trap_exit, true)
+
+      on_exit(fn ->
+        :persistent_term.erase({RecoveringRepo, :fail})
+        ProcessHelper.stop(RecoveringRepo)
+        delete_tables([RecoveringTable])
+      end)
+
+      {:ok, pid} = RecoveringRepo.start_link()
+      {:ok, _record} = RecoveringRepo.write(%RecoveringTable{name: "kept"})
+
+      :persistent_term.put({RecoveringRepo, :fail}, true)
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      log = capture_log(fn -> assert {:ok, _pid} = RecoveringRepo.start_link() end)
+
+      assert log =~ "before_init failed while recovering a table"
+
+      assert {:ok, %RecoveringTable{name: "kept"}} =
+               RecoveringRepo.one(RecoveringTable, %{name: "kept"})
     end
   end
 

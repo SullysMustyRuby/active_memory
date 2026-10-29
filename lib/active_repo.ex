@@ -331,7 +331,12 @@ defmodule ActiveMemory.ActiveRepo do
              {:ok, :seed_success} <-
                __maybe_seed__(table_status, Keyword.get(table_opts, :seed_file), table),
              {:ok, _result} <-
-               Operations.before_init(Keyword.get(table_opts, :before_init, :default), __MODULE__) do
+               Operations.before_init(
+                 Keyword.get(table_opts, :before_init, :default),
+                 __MODULE__,
+                 table: table,
+                 table_status: table_status
+               ) do
           :ok
         end
       end

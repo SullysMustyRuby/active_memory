@@ -1,6 +1,8 @@
 defmodule ActiveMemory.StoreTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Test.Support.Dogs.Dog
   alias Test.Support.Dogs.Store, as: DogStore
   alias Test.Support.People.Person
@@ -55,6 +57,27 @@ defmodule ActiveMemory.StoreTest do
     def fail, do: {:error, :no_source}
 
     def after_fail, do: send(:active_memory_store_test, :after_fail_ran)
+  end
+
+  defmodule RecoveringTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule RecoveringStore do
+    use ActiveMemory.Store,
+      table: ActiveMemory.StoreTest.RecoveringTable,
+      before_init: [{:warm, []}]
+
+    def warm do
+      case :persistent_term.get({__MODULE__, :fail}, false) do
+        true -> {:error, :no_source}
+        false -> :ok
+      end
+    end
   end
 
   # The stores are named GenServers; make sure none are lingering from a prior test
@@ -131,6 +154,29 @@ defmodule ActiveMemory.StoreTest do
 
       assert {:error, {:before_init, :fail, :no_source}} = FailingInitStore.start_link()
       refute_received :after_fail_ran
+    end
+
+    test "with a before_init method that fails while recovering the table" do
+      Process.flag(:trap_exit, true)
+
+      on_exit(fn ->
+        :persistent_term.erase({RecoveringStore, :fail})
+        ProcessHelper.stop(RecoveringStore)
+        delete_tables([RecoveringTable])
+      end)
+
+      {:ok, pid} = RecoveringStore.start_link()
+      {:ok, _record} = RecoveringStore.write(%RecoveringTable{name: "kept"})
+
+      :persistent_term.put({RecoveringStore, :fail}, true)
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      log = capture_log(fn -> assert {:ok, _pid} = RecoveringStore.start_link() end)
+
+      assert log =~ "before_init failed while recovering a table"
+      assert {:ok, %RecoveringTable{name: "kept"}} = RecoveringStore.one(%{name: "kept"})
     end
   end
 

@@ -9,6 +9,8 @@ defmodule ActiveMemory.Operations do
   `Repo` sharing one implementation rather than duplicating it.
   """
 
+  require Logger
+
   alias ActiveMemory.MultipleResultsError
   alias ActiveMemory.NotFoundError
 
@@ -53,6 +55,35 @@ defmodule ActiveMemory.Operations do
         {:error, _reason} = error -> {:halt, error}
       end
     end)
+  end
+
+  @doc """
+  Run the `before_init` methods for a store whose table was just set up.
+
+  `opts` takes the `:table` and its `:table_status`, `:created` or `:recovered`, as
+  `create_table/1` reported it. On a created table this is `before_init/2`. On a
+  recovered table a failing method is logged as a warning and the result is
+  `{:ok, :before_init_failed_on_recovery}`: the table already holds its data, so
+  refusing to start would only cut the application off from it.
+  """
+  @spec before_init(:default | tuple() | list(), module(), keyword()) ::
+          {:ok, atom()} | {:error, {:before_init, atom(), term()}}
+  def before_init(spec, module, opts) do
+    case {before_init(spec, module), Keyword.fetch!(opts, :table_status)} do
+      {{:error, {:before_init, method, reason}}, :recovered} ->
+        Logger.warning(
+          "ActiveMemory before_init failed while recovering a table; " <>
+            "the store started with the recovered data",
+          active_memory_table: Keyword.fetch!(opts, :table),
+          before_init_method: method,
+          before_init_reason: reason
+        )
+
+        {:ok, :before_init_failed_on_recovery}
+
+      {result, _table_status} ->
+        result
+    end
   end
 
   @doc """

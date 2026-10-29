@@ -259,12 +259,25 @@ end
 ```
 
 ## Before `init`
-All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments. The methods run in order; one that returns `{:error, reason}` stops the store from starting, `start_link` returns `{:error, {:before_init, method, reason}}`, and the remaining methods are skipped. Any other return value counts as success.
+All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments. The methods run in order; one that returns `{:error, reason}` stops the store from starting, `start_link` returns `{:error, {:before_init, method, reason}}`, and the remaining methods are skipped. Any other return value counts as success. When the table was recovered rather than created (see below), a failing method is logged as a warning instead, and the store starts with the recovered data.
 ```elixir
 defmodule MyApp.People.Store do
   use ActiveMemory.Store,
     table: MyApp.People.Person,
     before_init: [{:run_me, ["arg1", "arg2", ...]}, {:run_me_too, []}]
+end
+```
+
+A method that only warms up data the store can run without should not stop it from
+starting. Log the failure and return `:ok`:
+```elixir
+def load_catalog do
+  case MyApp.Catalog.fetch_all() do
+    {:ok, products} -> Enum.each(products, &write/1)
+    {:error, reason} -> Logger.warning("catalog warm-up skipped", reason: reason)
+  end
+
+  :ok
 end
 ```
 
