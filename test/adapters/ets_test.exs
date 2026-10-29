@@ -120,6 +120,11 @@ defmodule ActiveMemory.Adapters.EtsTest do
       assert {:error, :query_schema_mismatch} ==
                DogStore.one(%{shoe_size: "13", lipstick: "pink"})
     end
+
+    test "a match syntax value matches only itself" do
+      assert {:error, :not_found} == DogStore.one(%{name: :_, breed: "Husky"})
+      assert {:error, :not_found} == DogStore.one(%{name: :"$1", breed: "Husky"})
+    end
   end
 
   describe "one/1 with a match query" do
@@ -184,6 +189,22 @@ defmodule ActiveMemory.Adapters.EtsTest do
     test "returns error when bad keys are in the query" do
       assert {:error, :query_schema_mismatch} ==
                DogStore.select(%{shoe_size: "13", lipstick: "pink"})
+    end
+
+    test "a match syntax value matches only itself" do
+      assert {:ok, []} == DogStore.select(%{name: :_})
+      assert {:ok, []} == DogStore.select(%{breed: :"$1"})
+    end
+
+    test "a map value matches only an equal map" do
+      {:ok, _} =
+        DogStore.write(%Dog{name: "rex", breed: "Husky", nested: %{owner: "laura", vet: "b"}})
+
+      assert {:ok, []} == DogStore.select(%{nested: %{}})
+      assert {:ok, []} == DogStore.select(%{nested: %{owner: "laura"}})
+
+      assert {:ok, [%Dog{name: "rex"}]} =
+               DogStore.select(%{nested: %{owner: "laura", vet: "b"}})
     end
   end
 
@@ -275,6 +296,26 @@ defmodule ActiveMemory.Adapters.EtsTest do
         assert dog.weight != 60
       end
     end
+
+    test "an atom value is not read as a field variable" do
+      value = :"$2"
+
+      assert {:ok, []} == DogStore.select(match(:breed == value))
+    end
+
+    test "a tuple value is compared as a literal" do
+      value = {:a, :b, :c}
+      {:ok, _} = DogStore.write(%Dog{name: value, breed: "Tuple"})
+
+      assert {:ok, [%Dog{breed: "Tuple"}]} = DogStore.select(match(:name == value))
+    end
+
+    test "a map value is compared as a literal" do
+      value = %{owner: "erin"}
+      {:ok, _} = DogStore.write(%Dog{name: "rex", breed: "Husky", nested: value})
+
+      assert {:ok, [%Dog{name: "rex"}]} = DogStore.select(match(:nested == value))
+    end
   end
 
   describe "withdraw/1 with a map query" do
@@ -306,6 +347,19 @@ defmodule ActiveMemory.Adapters.EtsTest do
     test "returns error when bad keys are in the query" do
       assert {:error, :query_schema_mismatch} ==
                DogStore.withdraw(%{shoe_size: "13", lipstick: "pink"})
+    end
+
+    test "a match syntax value removes nothing" do
+      assert {:error, :not_found} == DogStore.withdraw(%{name: "codo", breed: :_})
+      assert {:ok, %Dog{name: "codo"}} = DogStore.one(%{name: "codo"})
+    end
+
+    test "removes exactly the record holding a map" do
+      {:ok, _} = DogStore.write(%Dog{name: "rex", nested: %{owner: "laura"}})
+      count = DogStore.count()
+
+      assert {:ok, %Dog{name: "rex"}} = DogStore.withdraw(%{name: "rex"})
+      assert DogStore.count() == count - 1
     end
   end
 
@@ -345,6 +399,25 @@ defmodule ActiveMemory.Adapters.EtsTest do
       query = match(:breed == "PitBull" and :fixed? == true)
 
       assert_raise ActiveMemory.MultipleResultsError, fn -> DogStore.withdraw(query) end
+    end
+
+    # A match query finds exactly one record, so these isolate the delete step: the
+    # withdrawn record's own values must not widen what gets deleted.
+    test "deletes only the record whose key is a map" do
+      key = %{id: 1}
+      {:ok, _} = DogStore.write(%Dog{name: key, breed: "Map"})
+      {:ok, _} = DogStore.write(%Dog{name: %{id: 1, extra: 2}, breed: "Map"})
+
+      assert {:ok, %Dog{name: ^key}} = DogStore.withdraw(match(:name == key))
+      assert {:ok, [%Dog{name: %{id: 1, extra: 2}}]} = DogStore.select(%{breed: "Map"})
+    end
+
+    test "deletes only the record whose key is :_" do
+      {:ok, _} = DogStore.write(%Dog{name: :_, breed: "Wild"})
+      {:ok, _} = DogStore.write(%Dog{name: "other", breed: "Wild"})
+
+      assert {:ok, %Dog{name: :_}} = DogStore.withdraw(match(:name == :_))
+      assert {:ok, [%Dog{name: "other"}]} = DogStore.select(%{breed: "Wild"})
     end
   end
 

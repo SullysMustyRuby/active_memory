@@ -4,6 +4,29 @@ All notable changes to ActiveMemory are documented here. Versions follow
 [Semantic Versioning](https://semver.org); while the package is pre-1.0 a minor
 bump may carry a behavior change, and those are called out below.
 
+## 0.8.3
+
+### Security
+
+- Query values are always matched as values. In an attributes query, `:_`, an
+  atom such as `:"$1"`, or a map was read as match syntax, so
+  `one(%{token: :_})` could return, and `withdraw/1` could delete, a record the
+  caller never named. In a `match/1` query an atom such as `:"$2"` was read as
+  another field. A value taken from user input now matches only an equal term,
+  and key and index lookups are unchanged.
+- ETS `withdraw/1` deletes only the record it returns. A record holding a map
+  or `:_` could take other records with it.
+
+### Changed
+
+- A map value in an attributes query now matches only an equal map, not any map
+  that contains its keys.
+
+### Fixed
+
+- `match/1` accepts a tuple bound to a variable, such as a `{year, month, day}`
+  date. It raised before.
+
 ## 0.8.2
 
 ### Fixed

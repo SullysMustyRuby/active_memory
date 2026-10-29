@@ -37,6 +37,10 @@ defmodule ActiveMemory.Store do
   `get_by!/1`, as `c:Ecto.Repo.one/2` does. Use `select/2` when many records are
   expected.
 
+  Attribute values are matched as values. `:_`, an atom such as `:"$1"`, or a map
+  matches only a record holding that exact term, so a value taken from user
+  input never acts as a wildcard.
+
   Because reads and writes match a record in full, a struct held across a change
   goes stale; `reload/1` gets the current copy.
 

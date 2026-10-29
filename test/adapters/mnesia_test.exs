@@ -126,6 +126,10 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert {:error, :query_schema_mismatch} ==
                PeopleStore.one(%{shoe_size: "13", lipstick: "pink"})
     end
+
+    test "a match syntax value matches only itself" do
+      assert {:error, :not_found} == PeopleStore.one(%{first: :_, last: "roslin"})
+    end
   end
 
   describe "one/1 with a match query" do
@@ -207,6 +211,13 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       assert {:error, :query_schema_mismatch} ==
                PeopleStore.select(%{shoe_size: "13", lipstick: "pink"})
     end
+
+    test "a match syntax value matches only itself" do
+      write_seeds()
+
+      assert {:ok, []} == PeopleStore.select(%{first: :_})
+      assert {:ok, []} == PeopleStore.select(%{last: :"$4"})
+    end
   end
 
   describe "select/1 with a match query" do
@@ -276,6 +287,12 @@ defmodule ActiveMemory.Adapters.MneisaTest do
         assert person.age != 31
       end
     end
+
+    test "an atom value is not read as a field variable" do
+      value = :"$4"
+
+      assert {:ok, []} == PeopleStore.select(match(:last == value))
+    end
   end
 
   describe "withdraw/1 with a map query" do
@@ -309,6 +326,11 @@ defmodule ActiveMemory.Adapters.MneisaTest do
     test "returns error when bad keys are in the query" do
       assert {:error, :query_schema_mismatch} ==
                PeopleStore.withdraw(%{shoe_size: "13", lipstick: "pink"})
+    end
+
+    test "a match syntax value removes nothing" do
+      assert {:error, :not_found} == PeopleStore.withdraw(%{first: :_, last: "roslin"})
+      assert {:ok, %Person{first: "laura"}} = PeopleStore.one(%{last: "roslin"})
     end
   end
 
@@ -352,6 +374,12 @@ defmodule ActiveMemory.Adapters.MneisaTest do
       query = match(:hair_color == "brown" and :cylon? == false)
 
       assert_raise ActiveMemory.MultipleResultsError, fn -> PeopleStore.withdraw(query) end
+    end
+
+    test "an atom value is not read as a field variable" do
+      value = :"$4"
+
+      assert {:error, :not_found} == PeopleStore.withdraw(match(:last == value))
     end
   end
 
