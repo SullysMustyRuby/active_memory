@@ -4,6 +4,40 @@ All notable changes to ActiveMemory are documented here. Versions follow
 [Semantic Versioning](https://semver.org); while the package is pre-1.0 a minor
 bump may carry a behavior change, and those are called out below.
 
+## 0.9.0
+
+### Changed
+
+- **Table options are checked at compile time.** An unknown option, an invalid
+  value, or an option ActiveMemory sets itself (ETS `named_table`, `keypos` and
+  `heir`; Mnesia `attributes` and `record_name`) now raises `ArgumentError` when
+  the table module compiles. Before, it was dropped, or replaced by the default:
+  `type: :protected` silently made a `:set`, and `disc_copies: node()` left a
+  Mnesia table RAM-only. A table that compiled before may now fail to; the
+  message names the option to fix.
+- **A failing `before_init` method stops the store.** A method that returns
+  `{:error, reason}` now ends startup, the methods after it are skipped, and
+  `start_link` returns `{:error, {:before_init, method, reason}}`. Any other
+  return value still counts as success. On a table recovered after a crash the
+  failure is logged as a warning instead and the store starts with its data, so
+  a transient failure cannot keep a supervisor from restarting it. A warm-up
+  that should never block startup can log its own failure and return `:ok`;
+  the `ActiveMemory.Store` docs show the pattern.
+- **An `initial_state` must return `{:ok, state}`.** Any other value now makes
+  `start_link` return `{:error, {:invalid_initial_state, value}}`. Before,
+  `:ignore` left the store unstarted with no error, and other values crashed
+  with `bad_return_value`.
+
+### Added
+
+- Mnesia tables accept `local_content`, `storage_properties` and
+  `user_properties`, applied when the table is created.
+
+### Fixed
+
+- The ETS example in the `ActiveMemory.Table` docs used `type: :protected`; it
+  is `access: :protected`.
+
 ## 0.8.3
 
 ### Security

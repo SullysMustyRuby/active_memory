@@ -9,6 +9,8 @@ defmodule ActiveMemory.Operations do
   `Repo` sharing one implementation rather than duplicating it.
   """
 
+  require Logger
+
   alias ActiveMemory.MultipleResultsError
   alias ActiveMemory.NotFoundError
 
@@ -30,18 +32,58 @@ defmodule ActiveMemory.Operations do
 
   `spec` is `:default`, a single `{method, args}` tuple, or a list of such tuples.
   `module` is the module the methods are defined on (the `Store` or `Repo`).
+
+  Methods run in order. A method that returns `{:error, reason}` stops the run, so
+  later methods are skipped, and the result is `{:error, {:before_init, method,
+  reason}}`. Any other return value counts as success.
   """
-  @spec before_init(:default | tuple() | list(), module()) :: {:ok, atom()}
+  @spec before_init(:default | tuple() | list(), module()) ::
+          {:ok, atom()} | {:error, {:before_init, atom(), term()}}
   def before_init(:default, _module), do: {:ok, :default}
 
   def before_init({method, args}, module) when is_list(args) do
-    :erlang.apply(module, method, args)
-    {:ok, :before_init_success}
+    case :erlang.apply(module, method, args) do
+      {:error, reason} -> {:error, {:before_init, method, reason}}
+      _result -> {:ok, :before_init_success}
+    end
   end
 
   def before_init(methods, module) when is_list(methods) do
-    Enum.each(methods, &before_init(&1, module))
-    {:ok, :before_init_success}
+    Enum.reduce_while(methods, {:ok, :before_init_success}, fn step, success ->
+      case before_init(step, module) do
+        {:ok, _result} -> {:cont, success}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  @doc """
+  Run the `before_init` methods for a store whose table was just set up.
+
+  `opts` takes the `:table` and its `:table_status`, `:created` or `:recovered`, as
+  `create_table/1` reported it. On a created table this is `before_init/2`. On a
+  recovered table a failing method is logged as a warning and the result is
+  `{:ok, :before_init_failed_on_recovery}`: the table already holds its data, so
+  refusing to start would only cut the application off from it.
+  """
+  @spec before_init(:default | tuple() | list(), module(), keyword()) ::
+          {:ok, atom()} | {:error, {:before_init, atom(), term()}}
+  def before_init(spec, module, opts) do
+    case {before_init(spec, module), Keyword.fetch!(opts, :table_status)} do
+      {{:error, {:before_init, method, reason}}, :recovered} ->
+        Logger.warning(
+          "ActiveMemory before_init failed while recovering a table; " <>
+            "the store started with the recovered data",
+          active_memory_table: Keyword.fetch!(opts, :table),
+          before_init_method: method,
+          before_init_reason: reason
+        )
+
+        {:ok, :before_init_failed_on_recovery}
+
+      {result, _table_status} ->
+        result
+    end
   end
 
   @doc """

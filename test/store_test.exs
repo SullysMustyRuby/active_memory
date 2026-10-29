@@ -1,11 +1,84 @@
 defmodule ActiveMemory.StoreTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Test.Support.Dogs.Dog
   alias Test.Support.Dogs.Store, as: DogStore
   alias Test.Support.People.Person
   alias Test.Support.People.Store, as: PeopleStore
   alias Test.Support.ProcessHelper
+
+  defmodule IgnoringTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule IgnoringStore do
+    use ActiveMemory.Store,
+      table: ActiveMemory.StoreTest.IgnoringTable,
+      initial_state: {:ignore_state, []}
+
+    def ignore_state, do: :ignore
+  end
+
+  defmodule UntaggedTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule UntaggedStore do
+    use ActiveMemory.Store,
+      table: ActiveMemory.StoreTest.UntaggedTable,
+      initial_state: {:untagged_state, []}
+
+    def untagged_state, do: %{untagged: true}
+  end
+
+  defmodule FailingInitTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule FailingInitStore do
+    use ActiveMemory.Store,
+      table: ActiveMemory.StoreTest.FailingInitTable,
+      before_init: [{:fail, []}, {:after_fail, []}]
+
+    def fail, do: {:error, :no_source}
+
+    def after_fail, do: send(:active_memory_store_test, :after_fail_ran)
+  end
+
+  defmodule RecoveringTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule RecoveringStore do
+    use ActiveMemory.Store,
+      table: ActiveMemory.StoreTest.RecoveringTable,
+      before_init: [{:warm, []}]
+
+    def warm do
+      case :persistent_term.get({__MODULE__, :fail}, false) do
+        true -> {:error, :no_source}
+        false -> :ok
+      end
+    end
+  end
 
   # The stores are named GenServers; make sure none are lingering from a prior test
   # (or a prior module) before a test starts a fresh one, otherwise `start_link`
@@ -65,6 +138,46 @@ defmodule ActiveMemory.StoreTest do
       :ets.delete(Dog)
       Process.exit(pid, :kill)
     end
+
+    test "with an initial_state that does not return {:ok, state}" do
+      Process.flag(:trap_exit, true)
+      on_exit(fn -> delete_tables([IgnoringTable, UntaggedTable]) end)
+
+      assert {:error, {:invalid_initial_state, :ignore}} = IgnoringStore.start_link()
+      assert {:error, {:invalid_initial_state, %{untagged: true}}} = UntaggedStore.start_link()
+    end
+
+    test "with a before_init method that returns an error" do
+      Process.flag(:trap_exit, true)
+      Process.register(self(), :active_memory_store_test)
+      on_exit(fn -> delete_tables([FailingInitTable]) end)
+
+      assert {:error, {:before_init, :fail, :no_source}} = FailingInitStore.start_link()
+      refute_received :after_fail_ran
+    end
+
+    test "with a before_init method that fails while recovering the table" do
+      Process.flag(:trap_exit, true)
+
+      on_exit(fn ->
+        :persistent_term.erase({RecoveringStore, :fail})
+        ProcessHelper.stop(RecoveringStore)
+        delete_tables([RecoveringTable])
+      end)
+
+      {:ok, pid} = RecoveringStore.start_link()
+      {:ok, _record} = RecoveringStore.write(%RecoveringTable{name: "kept"})
+
+      :persistent_term.put({RecoveringStore, :fail}, true)
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      log = capture_log(fn -> assert {:ok, _pid} = RecoveringStore.start_link() end)
+
+      assert log =~ "before_init failed while recovering a table"
+      assert {:ok, %RecoveringTable{name: "kept"}} = RecoveringStore.one(%{name: "kept"})
+    end
   end
 
   describe "reload_seeds/0" do
@@ -80,5 +193,9 @@ defmodule ActiveMemory.StoreTest do
       :mnesia.delete_table(Person)
       Process.exit(pid, :kill)
     end
+  end
+
+  defp delete_tables(tables) do
+    for table <- tables, :ets.whereis(table) != :undefined, do: :ets.delete(table)
   end
 end

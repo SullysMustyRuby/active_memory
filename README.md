@@ -259,12 +259,25 @@ end
 ```
 
 ## Before `init`
-All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments.
+All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments. The methods run in order; one that returns `{:error, reason}` stops the store from starting, `start_link` returns `{:error, {:before_init, method, reason}}`, and the remaining methods are skipped. Any other return value counts as success. When the table was recovered rather than created, a failing method is logged as a warning instead, and the store starts with the data the table already holds. A table counts as recovered when the table heir kept an ETS table through a crash (see below), or when a Mnesia table already exists as the store starts: that includes every boot of a table with `disc_copies`, and a node joining a cluster that already has the table.
 ```elixir
 defmodule MyApp.People.Store do
   use ActiveMemory.Store,
     table: MyApp.People.Person,
     before_init: [{:run_me, ["arg1", "arg2", ...]}, {:run_me_too, []}]
+end
+```
+
+A method that only warms up data the store can run without should not stop it from
+starting. Log the failure and return `:ok`:
+```elixir
+def load_catalog do
+  case MyApp.Catalog.fetch_all() do
+    {:ok, products} -> Enum.each(products, &write/1)
+    {:error, reason} -> Logger.warning("catalog warm-up skipped", reason: reason)
+  end
+
+  :ok
 end
 ```
 
@@ -290,7 +303,7 @@ All stores are `GenServers` and thus have a state. The default state is an array
 ```elixir
 %{started_at: "date time when first started", table_name: MyApp.People.Store}
 ```
-This default state can be overwritten with a new state structure or values by supplying a method and arguments as a tuple to the keyword `initial_state`.
+This default state can be overwritten with a new state structure or values by supplying a method and arguments as a tuple to the keyword `initial_state`. The method must return `{:ok, new_state}`. `{:error, reason}` is returned from `start_link` as is; any other value stops the store with `{:error, {:invalid_initial_state, value}}`.
 
 ```elixir
 defmodule MyApp.People.Store do
@@ -509,7 +522,7 @@ by adding `active_memory` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:active_memory, "~> 0.8.0"}
+    {:active_memory, "~> 0.9.0"}
   ]
 end
 ```

@@ -7,6 +7,20 @@ defmodule ActiveMemory.Adapters.MneisaTest do
   alias Test.Support.Dogs.Dog
   alias Test.Support.ProcessHelper
 
+  defmodule CreationOptionsTable do
+    use ActiveMemory.Table,
+      options: [
+        local_content: true,
+        storage_properties: [ets: [read_concurrency: true]],
+        user_properties: [{:owner, "erin"}]
+      ]
+
+    attributes do
+      field(:name)
+      field(:value)
+    end
+  end
+
   setup_all do
     ProcessHelper.stop(PeopleStore)
     {:ok, pid} = PeopleStore.start_link()
@@ -36,6 +50,19 @@ defmodule ActiveMemory.Adapters.MneisaTest do
 
     test "returns empty list if table empty" do
       assert PeopleStore.all() == []
+    end
+  end
+
+  describe "create_table/1" do
+    test "creates the table with the options set only at creation" do
+      on_exit(fn -> :mnesia.delete_table(CreationOptionsTable) end)
+
+      assert {:ok, :created} == ActiveMemory.Adapters.Mnesia.create_table(CreationOptionsTable)
+      assert :mnesia.table_info(CreationOptionsTable, :local_content)
+      assert {:owner, "erin"} in :mnesia.table_info(CreationOptionsTable, :user_properties)
+
+      assert [ets: [read_concurrency: true]] ==
+               :mnesia.table_info(CreationOptionsTable, :storage_properties)
     end
   end
 
