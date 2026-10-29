@@ -259,7 +259,7 @@ end
 ```
 
 ## Before `init`
-All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments. The methods run in order; one that returns `{:error, reason}` stops the store from starting, `start_link` returns `{:error, {:before_init, method, reason}}`, and the remaining methods are skipped. Any other return value counts as success. When the table was recovered rather than created (see below), a failing method is logged as a warning instead, and the store starts with the recovered data.
+All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments. The methods run in order; one that returns `{:error, reason}` stops the store from starting, `start_link` returns `{:error, {:before_init, method, reason}}`, and the remaining methods are skipped. Any other return value counts as success. When the table was recovered rather than created, a failing method is logged as a warning instead, and the store starts with the data the table already holds. A table counts as recovered when the table heir kept an ETS table through a crash (see below), or when a Mnesia table already exists as the store starts: that includes every boot of a table with `disc_copies`, and a node joining a cluster that already has the table.
 ```elixir
 defmodule MyApp.People.Store do
   use ActiveMemory.Store,
