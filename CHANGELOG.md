@@ -4,7 +4,7 @@ All notable changes to ActiveMemory are documented here. Versions follow
 [Semantic Versioning](https://semver.org); while the package is pre-1.0 a minor
 bump may carry a behavior change, and those are called out below.
 
-## Unreleased
+## 0.8.3
 
 ### Security
 
