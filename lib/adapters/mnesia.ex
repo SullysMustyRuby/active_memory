@@ -239,33 +239,22 @@ defmodule ActiveMemory.Adapters.Mnesia do
     end)
   end
 
+  defp map_match_spec(pattern, guards, table),
+    do: [{Tuple.insert_at(pattern, 0, table), guards, [:"$_"]}]
+
   defp match_object(query) do
     :mnesia.transaction(fn ->
       :mnesia.match_object(query)
     end)
   end
 
-  # A map query with no guards keeps using match_object so Mnesia can use the
-  # table's indexes. Values that need an exact-match guard go through select.
+  # A query that needs no guard keeps the match_object path it has always used; one
+  # with guards needs select. Both turn a bound key or indexed field into a lookup.
   defp read_map_query({pattern, []}, table),
     do: match_object(Tuple.insert_at(pattern, 0, table))
 
   defp read_map_query({pattern, guards}, table),
     do: select_object(map_match_spec(pattern, guards, table), table)
-
-  defp withdraw_map_query({pattern, []}, table),
-    do: withdraw_match_object(Tuple.insert_at(pattern, 0, table), table)
-
-  defp withdraw_map_query({pattern, guards}, table) do
-    match_spec = map_match_spec(pattern, guards, table)
-
-    :mnesia.transaction(fn ->
-      delete_matched(:mnesia.select(table, match_spec, :write), table)
-    end)
-  end
-
-  defp map_match_spec(pattern, guards, table),
-    do: [{Tuple.insert_at(pattern, 0, table), guards, [:"$_"]}]
 
   defp select_object(match_spec, table) do
     :mnesia.transaction(fn ->
@@ -279,6 +268,17 @@ defmodule ActiveMemory.Adapters.Mnesia do
       {:timeout, bad_tables} -> {:error, {:timeout, bad_tables}}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp withdraw_map_query({pattern, []}, table),
+    do: withdraw_match_object(Tuple.insert_at(pattern, 0, table), table)
+
+  defp withdraw_map_query({pattern, guards}, table) do
+    match_spec = map_match_spec(pattern, guards, table)
+
+    :mnesia.transaction(fn ->
+      delete_matched(:mnesia.select(table, match_spec, :write), table)
+    end)
   end
 
   defp withdraw_match_object(match_query, table) do

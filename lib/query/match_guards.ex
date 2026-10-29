@@ -7,6 +7,7 @@ defmodule ActiveMemory.Query.MatchGuards do
   # index lookups still apply. Any other value is bound to its field's variable
   # and compared exactly in a guard, wrapped in `:const` so it is never evaluated.
 
+  @spec build(module(), map()) :: {:ok, {tuple(), list()}} | {:error, :query_schema_mismatch}
   def build(table, query_map) do
     table.__attributes__(:query_fields)
     |> validate_query(query_map)
@@ -14,6 +15,7 @@ defmodule ActiveMemory.Query.MatchGuards do
   end
 
   # Build a `{pattern, guards}` pair that matches exactly `record` and nothing else.
+  @spec exact(tuple()) :: {tuple(), list()}
   def exact(record) when is_tuple(record) do
     record
     |> Tuple.to_list()
@@ -22,10 +24,10 @@ defmodule ActiveMemory.Query.MatchGuards do
     |> to_pattern()
   end
 
-  defp validate_query(attributes, query_map) do
-    case Enum.all?(query_map, fn {key, _value} -> Enum.member?(attributes, key) end) do
-      true -> {:ok, attributes}
-      false -> {:error, :query_schema_mismatch}
+  defp bind(value, variable, {pattern, guards}) do
+    case literal?(value) do
+      true -> {[value | pattern], guards}
+      false -> {[variable | pattern], [{:"=:=", variable, {:const, value}} | guards]}
     end
   end
 
@@ -45,16 +47,6 @@ defmodule ActiveMemory.Query.MatchGuards do
 
   defp build_match(error, _query_map, _variables), do: error
 
-  defp bind(value, variable, {pattern, guards}) do
-    case literal?(value) do
-      true -> {[value | pattern], guards}
-      false -> {[variable | pattern], [{:"=:=", variable, {:const, value}} | guards]}
-    end
-  end
-
-  defp to_pattern({pattern, guards}),
-    do: {pattern |> Enum.reverse() |> List.to_tuple(), Enum.reverse(guards)}
-
   defp literal?(:_), do: false
 
   defp literal?(value) when is_atom(value),
@@ -67,4 +59,14 @@ defmodule ActiveMemory.Query.MatchGuards do
   defp literal?([head | tail]), do: literal?(head) and literal?(tail)
 
   defp literal?(_value), do: true
+
+  defp to_pattern({pattern, guards}),
+    do: {pattern |> Enum.reverse() |> List.to_tuple(), Enum.reverse(guards)}
+
+  defp validate_query(attributes, query_map) do
+    case Enum.all?(query_map, fn {key, _value} -> Enum.member?(attributes, key) end) do
+      true -> {:ok, attributes}
+      false -> {:error, :query_schema_mismatch}
+    end
+  end
 end

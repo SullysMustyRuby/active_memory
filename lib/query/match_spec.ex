@@ -9,7 +9,6 @@ defmodule ActiveMemory.Query.MatchSpec do
     [{match_head, [reduce(query, query_map)], @result}]
   end
 
-  # A boolean operator joins two sub-queries.
   defp reduce({operand, lhs, rhs}, query_map) when operand in @boolean do
     {translate(operand), reduce(lhs, query_map), reduce(rhs, query_map)}
   end
@@ -26,11 +25,6 @@ defmodule ActiveMemory.Query.MatchSpec do
   # A bare value in a boolean position, such as the `true` in `:age > 1 and true`.
   defp reduce(value, _query_map) when not is_tuple(value), do: {:const, value}
 
-  defp variable(attribute, query_map) when is_map(query_map),
-    do: Map.get(query_map, attribute, attribute)
-
-  defp variable(attribute, query_map), do: Keyword.get(query_map, attribute, attribute)
-
   defp translate(:<=), do: :"=<"
 
   defp translate(:!=), do: :"/="
@@ -40,4 +34,12 @@ defmodule ActiveMemory.Query.MatchSpec do
   defp translate(:!==), do: :"=/="
 
   defp translate(operand), do: operand
+
+  # A name that is not a field is compared as a constant, so an atom like `:"$1"`
+  # on the left is never read as a match variable.
+  defp variable(attribute, query_map) when is_map(query_map),
+    do: Map.get(query_map, attribute, {:const, attribute})
+
+  defp variable(attribute, query_map),
+    do: Keyword.get(query_map, attribute, {:const, attribute})
 end

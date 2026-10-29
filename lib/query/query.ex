@@ -54,6 +54,10 @@ defmodule ActiveMemory.Query do
   match(:inserted_at > yesterday)
   ```
 
+  A value is only ever compared as a value: an atom such as `:_` or `:"$1"`, a
+  tuple or a map matches an equal term and nothing else, so a value taken from
+  user input never widens the query.
+
   ## Comparisons use Erlang term order
 
   The generated match spec compares with Erlang's term ordering, which is correct for

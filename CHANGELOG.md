@@ -8,20 +8,24 @@ bump may carry a behavior change, and those are called out below.
 
 ### Security
 
-- Query values are now always compared as values. Map queries placed values
-  straight into an ETS/Mnesia match pattern, where `:_` and atoms like `:"$1"`
-  are wildcards and a map matches any map holding its keys, so
+- Query values are always matched as values. In an attributes query, `:_`, an
+  atom such as `:"$1"`, or a map was read as match syntax, so
   `one(%{token: :_})` could return, and `withdraw/1` could delete, a record the
-  caller never named. `match/1` queries put values into guards unwrapped, where
-  an atom such as `:"$2"` read another field. Values that are safe as literals
-  stay in the pattern, so key and index lookups are unchanged; any other value
-  is bound to its field and compared with `=:=` against `{:const, value}`. The
-  ETS `withdraw/1` delete now matches the withdrawn record exactly as well.
+  caller never named. In a `match/1` query an atom such as `:"$2"` was read as
+  another field. A value taken from user input now matches only an equal term,
+  and key and index lookups are unchanged.
+- ETS `withdraw/1` deletes only the record it returns. A record holding a map
+  or `:_` could take other records with it.
 
 ### Changed
 
-- A map value in a map query now matches only an equal map, not any map that
-  contains its keys.
+- A map value in an attributes query now matches only an equal map, not any map
+  that contains its keys.
+
+### Fixed
+
+- `match/1` accepts a tuple bound to a variable, such as a `{year, month, day}`
+  date. It raised before.
 
 ## 0.8.2
 
