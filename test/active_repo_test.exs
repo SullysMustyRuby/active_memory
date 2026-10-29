@@ -11,6 +11,42 @@ defmodule ActiveMemory.ActiveRepoTest do
   alias Test.Support.Multi.Widget
   alias Test.Support.ProcessHelper
 
+  defmodule UntaggedTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule UntaggedRepo do
+    use ActiveMemory.ActiveRepo,
+      tables: [ActiveMemory.ActiveRepoTest.UntaggedTable],
+      initial_state: {:untagged_state, []}
+
+    def untagged_state, do: %{untagged: true}
+  end
+
+  defmodule FailingInitTable do
+    use ActiveMemory.Table, type: :ets
+
+    attributes do
+      field(:name)
+    end
+  end
+
+  defmodule FailingInitRepo do
+    use ActiveMemory.ActiveRepo,
+      tables: [
+        {ActiveMemory.ActiveRepoTest.FailingInitTable,
+         before_init: [{:fail, []}, {:after_fail, []}]}
+      ]
+
+    def fail, do: {:error, :no_source}
+
+    def after_fail, do: send(:active_memory_repo_test, :after_fail_ran)
+  end
+
   setup_all do
     ProcessHelper.stop(MultiRepo)
     {:ok, pid} = MultiRepo.start_link()
@@ -81,6 +117,22 @@ defmodule ActiveMemory.ActiveRepoTest do
       assert InitRepo.start_link() == {:error, :create_table_failed}
 
       :ets.delete(Gizmo)
+    end
+
+    test "with an initial_state that does not return {:ok, state}" do
+      Process.flag(:trap_exit, true)
+      on_exit(fn -> delete_tables([UntaggedTable]) end)
+
+      assert {:error, {:invalid_initial_state, %{untagged: true}}} = UntaggedRepo.start_link()
+    end
+
+    test "with a before_init method that returns an error" do
+      Process.flag(:trap_exit, true)
+      Process.register(self(), :active_memory_repo_test)
+      on_exit(fn -> delete_tables([FailingInitTable]) end)
+
+      assert {:error, {:before_init, :fail, :no_source}} = FailingInitRepo.start_link()
+      refute_received :after_fail_ran
     end
   end
 
@@ -286,5 +338,9 @@ defmodule ActiveMemory.ActiveRepoTest do
       # ...but the seed file is not re-run on a recovered table
       assert MultiRepo.one(Widget, %{name: "seed_widget", color: "green"}) == {:error, :not_found}
     end
+  end
+
+  defp delete_tables(tables) do
+    for table <- tables, :ets.whereis(table) != :undefined, do: :ets.delete(table)
   end
 end

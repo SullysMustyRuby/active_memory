@@ -152,6 +152,11 @@ defmodule ActiveMemory.ActiveRepo do
              {:ok, initial_state} <- __initial_state__() do
           __schedule_sweep__()
           {:ok, initial_state}
+        else
+          # gen_server (OTP 26+) returns {:error, reason} from start_link without a crash
+          # report. Elixir's init/1 callback type omits this return; Dialyzer may say so.
+          {:error, _reason} = error -> error
+          invalid -> {:error, {:invalid_initial_state, invalid}}
         end
       end
 

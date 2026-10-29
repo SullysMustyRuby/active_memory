@@ -259,7 +259,7 @@ end
 ```
 
 ## Before `init`
-All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments.
+All stores are `GenServers` and have `init` functions. While those are abstracted you can still specify methods to run during the `init` phase of the GenServer startup. Use the `before_init` keyword and add the methods as tuples with the arguments. The methods run in order; one that returns `{:error, reason}` stops the store from starting, `start_link` returns `{:error, {:before_init, method, reason}}`, and the remaining methods are skipped. Any other return value counts as success.
 ```elixir
 defmodule MyApp.People.Store do
   use ActiveMemory.Store,
@@ -290,7 +290,7 @@ All stores are `GenServers` and thus have a state. The default state is an array
 ```elixir
 %{started_at: "date time when first started", table_name: MyApp.People.Store}
 ```
-This default state can be overwritten with a new state structure or values by supplying a method and arguments as a tuple to the keyword `initial_state`.
+This default state can be overwritten with a new state structure or values by supplying a method and arguments as a tuple to the keyword `initial_state`. The method must return `{:ok, new_state}`. `{:error, reason}` is returned from `start_link` as is; any other value stops the store with `{:error, {:invalid_initial_state, value}}`.
 
 ```elixir
 defmodule MyApp.People.Store do

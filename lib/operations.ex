@@ -30,18 +30,29 @@ defmodule ActiveMemory.Operations do
 
   `spec` is `:default`, a single `{method, args}` tuple, or a list of such tuples.
   `module` is the module the methods are defined on (the `Store` or `Repo`).
+
+  Methods run in order. A method that returns `{:error, reason}` stops the run, so
+  later methods are skipped, and the result is `{:error, {:before_init, method,
+  reason}}`. Any other return value counts as success.
   """
-  @spec before_init(:default | tuple() | list(), module()) :: {:ok, atom()}
+  @spec before_init(:default | tuple() | list(), module()) ::
+          {:ok, atom()} | {:error, {:before_init, atom(), term()}}
   def before_init(:default, _module), do: {:ok, :default}
 
   def before_init({method, args}, module) when is_list(args) do
-    :erlang.apply(module, method, args)
-    {:ok, :before_init_success}
+    case :erlang.apply(module, method, args) do
+      {:error, reason} -> {:error, {:before_init, method, reason}}
+      _result -> {:ok, :before_init_success}
+    end
   end
 
   def before_init(methods, module) when is_list(methods) do
-    Enum.each(methods, &before_init(&1, module))
-    {:ok, :before_init_success}
+    Enum.reduce_while(methods, {:ok, :before_init_success}, fn step, success ->
+      case before_init(step, module) do
+        {:ok, _result} -> {:cont, success}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
   @doc """
