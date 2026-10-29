@@ -33,9 +33,41 @@ defmodule ActiveMemory.Adapters.Ets.HelpersTest do
              ] == Helpers.build_options(options)
     end
 
-    test "ignores invalid or malformed options" do
-      options = [type: :large, access: :sure, compressed: "yes"]
-      assert [:set, :public] == Helpers.build_options(options)
+    test "accepts false for the boolean options" do
+      options = [compressed: false, read_concurrency: false, write_concurrency: false]
+
+      assert [:set, :public, {:read_concurrency, false}, {:write_concurrency, false}] ==
+               Helpers.build_options(options)
+    end
+
+    test "raises on an unknown option" do
+      assert_raise ArgumentError, ~r/unknown ETS table option :size/, fn ->
+        Helpers.build_options(size: 10)
+      end
+    end
+
+    test "raises on an invalid value" do
+      for option <- [type: :large, access: :sure, compressed: "yes", write_concurrency: :maybe] do
+        assert_raise ArgumentError, ~r/invalid value .* for the ETS table option/, fn ->
+          Helpers.build_options([option])
+        end
+      end
+    end
+
+    test "raises on an option ActiveMemory sets itself" do
+      for option <- [keypos: 2, named_table: true, heir: :none] do
+        assert_raise ArgumentError, ~r/is set by ActiveMemory/, fn ->
+          Helpers.build_options([option])
+        end
+      end
+    end
+
+    test "raises when the options are not a keyword list" do
+      for options <- [[:compressed], %{type: :set}, :none] do
+        assert_raise ArgumentError, ~r/must be a keyword list/, fn ->
+          Helpers.build_options(options)
+        end
+      end
     end
 
     test "returns defaults when no options" do

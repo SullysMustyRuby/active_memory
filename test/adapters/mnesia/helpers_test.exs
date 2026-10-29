@@ -27,10 +27,51 @@ defmodule ActiveMemory.Adapters.Mnesia.HelpersTest do
       assert Helpers.build_options(options) == options
     end
 
-    test "ignores invalid options" do
-      options = [load_order: -1, majority: "yup", size: "huh?"]
+    test "passes through the options set only at table creation" do
+      options = [
+        local_content: true,
+        storage_properties: [ets: [read_concurrency: true]],
+        user_properties: [{:owner, "erin"}]
+      ]
 
-      assert Helpers.build_options(options) == []
+      assert Helpers.build_options(options) == options
+    end
+
+    test "raises on an unknown option" do
+      assert_raise ArgumentError, ~r/unknown Mnesia table option :size/, fn ->
+        Helpers.build_options(size: "huh?")
+      end
+    end
+
+    test "raises on an invalid value" do
+      for option <- [
+            load_order: -1,
+            majority: "yup",
+            type: :duplicate_bag,
+            disc_copies: node(),
+            local_content: "yes",
+            user_properties: [:owner]
+          ] do
+        assert_raise ArgumentError, ~r/invalid value .* for the Mnesia table option/, fn ->
+          Helpers.build_options([option])
+        end
+      end
+    end
+
+    test "raises on an option ActiveMemory sets itself" do
+      for option <- [attributes: [:a], record_name: :other] do
+        assert_raise ArgumentError, ~r/is set by ActiveMemory/, fn ->
+          Helpers.build_options([option])
+        end
+      end
+    end
+
+    test "raises when the options are not a keyword list" do
+      for options <- [[:index], %{type: :set}, :none] do
+        assert_raise ArgumentError, ~r/must be a keyword list/, fn ->
+          Helpers.build_options(options)
+        end
+      end
     end
   end
 

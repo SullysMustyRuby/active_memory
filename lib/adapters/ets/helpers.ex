@@ -1,9 +1,19 @@
 defmodule ActiveMemory.Adapters.Ets.Helpers do
   @moduledoc false
 
-  @types [:set, :ordered_set, :bag, :duplicate_bag]
   @access [:public, :protected, :private]
   @default_options [type: :set, access: :public]
+  # ActiveMemory names the table, keys it on the first field and assigns its heir.
+  @owned_options [:heir, :keypos, :named_table]
+  @supported_options [
+    :access,
+    :compressed,
+    :decentralized_counters,
+    :read_concurrency,
+    :type,
+    :write_concurrency
+  ]
+  @types [:set, :ordered_set, :bag, :duplicate_bag]
 
   @spec build_match_head(list()) :: tuple()
   def build_match_head(query_map) do
@@ -16,10 +26,16 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
   def build_options(:defaults), do: [:set, :public]
 
   def build_options(options) do
-    @default_options
-    |> Keyword.merge(options)
-    |> Enum.into([], fn {key, value} -> validate_option(key, value) end)
-    |> Enum.reject(&is_nil/1)
+    case Keyword.keyword?(options) do
+      true ->
+        @default_options
+        |> Keyword.merge(options)
+        |> Enum.map(fn {key, value} -> validate_option(key, value) end)
+        |> Enum.reject(&is_nil/1)
+
+      false ->
+        raise ArgumentError, "ETS table options must be a keyword list, got: #{inspect(options)}"
+    end
   end
 
   @spec to_struct(tuple(), atom()) :: map()
@@ -39,34 +55,37 @@ defmodule ActiveMemory.Adapters.Ets.Helpers do
     |> Enum.into(%{})
   end
 
-  defp validate_option(:type, type) do
-    case Enum.member?(@types, type) do
-      true -> type
-      false -> hd(@types)
-    end
+  defp invalid_option!(key, _value) when key in @owned_options,
+    do: raise(ArgumentError, "the ETS table option #{inspect(key)} is set by ActiveMemory")
+
+  defp invalid_option!(key, value) when key in @supported_options,
+    do:
+      raise(
+        ArgumentError,
+        "invalid value #{inspect(value)} for the ETS table option #{inspect(key)}"
+      )
+
+  defp invalid_option!(key, _value) do
+    raise ArgumentError,
+          "unknown ETS table option #{inspect(key)}, expected one of #{inspect(@supported_options)}"
   end
 
-  defp validate_option(:access, access) do
-    case Enum.member?(@access, access) do
-      true -> access
-      false -> hd(@access)
-    end
-  end
+  defp validate_option(:access, access) when access in @access, do: access
 
-  defp validate_option(:decentralized_counters, true),
-    do: {:decentralized_counters, true}
+  defp validate_option(:compressed, true), do: :compressed
 
-  defp validate_option(:compressed, true),
-    do: :compressed
+  defp validate_option(:compressed, false), do: nil
 
-  defp validate_option(:read_concurrency, true),
-    do: {:read_concurrency, true}
+  defp validate_option(:decentralized_counters, value) when is_boolean(value),
+    do: {:decentralized_counters, value}
 
-  defp validate_option(:write_concurrency, true),
-    do: {:write_concurrency, true}
+  defp validate_option(:read_concurrency, value) when is_boolean(value),
+    do: {:read_concurrency, value}
 
-  defp validate_option(:write_concurrency, :auto),
-    do: {:write_concurrency, :auto}
+  defp validate_option(:type, type) when type in @types, do: type
 
-  defp validate_option(_key, _value), do: nil
+  defp validate_option(:write_concurrency, value) when is_boolean(value) or value == :auto,
+    do: {:write_concurrency, value}
+
+  defp validate_option(key, value), do: invalid_option!(key, value)
 end

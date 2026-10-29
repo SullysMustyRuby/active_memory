@@ -37,4 +37,24 @@ defmodule ActiveMemory.TableTest do
       assert Person.__attributes__(:auto_generate_uuid)
     end
   end
+
+  describe "use ActiveMemory.Table with options" do
+    test "an invalid option fails to compile the table" do
+      source = """
+      defmodule ActiveMemory.TableTest.MisconfiguredTable do
+        use ActiveMemory.Table, type: :ets, options: [type: :protected]
+
+        attributes do
+          field(:name)
+        end
+      end
+      """
+
+      assert_raise ArgumentError,
+                   ~r/invalid value :protected for the ETS table option :type/,
+                   fn ->
+                     Code.compile_string(source)
+                   end
+    end
+  end
 end

@@ -114,11 +114,16 @@ defmodule ActiveMemory.Table do
   Further reading can be found with [ETS docs](https://www.erlang.org/doc/man/ets.html) and [Mnesia docs](https://www.erlang.org/doc/man/mnesia.html).
   All options should be structured as a [Keyword list](https://hexdocs.pm/elixir/1.12/Keyword.html). 
 
+  Options are checked when the table module compiles. An unknown option, an invalid
+  value, or an option ActiveMemory sets itself (ETS `named_table`, `keypos` and `heir`;
+  Mnesia `attributes` and `record_name`) raises an `ArgumentError`, so a typo fails the
+  build instead of quietly falling back to a default.
+
   Example:
   ```elixir
   use ActiveMemory.Table,
     type: :ets,
-    options: [compressed: true, read_concurrency: true, type: :protected]
+    options: [compressed: true, read_concurrency: true, access: :protected]
   ```
 
   ### Record Expiry (`ttl`)
@@ -251,6 +256,13 @@ defmodule ActiveMemory.Table do
 
   For a single node application none of this applies: the only replica is always a
   majority, so `majority: true` adds no availability constraint.
+
+  #### Options set only at creation
+  `local_content`, `storage_properties` and `user_properties` are passed to
+  `:mnesia.create_table/2` as given, for example
+  `[local_content: true, storage_properties: [ets: [read_concurrency: true]]]`. They take
+  effect when the table is created: a table that already exists keeps its own values,
+  because ActiveMemory does not migrate them.
 
   ### ETS Options
   #### Table Access
