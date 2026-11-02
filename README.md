@@ -509,7 +509,7 @@ defmodule MyApp.PlanetsTest do
 end
 ```
 
-This is the one case ActiveMemory cannot isolate for you yet. A sandbox that gives each test process its own table is on the roadmap for 0.9.0 — see [Planned Enhancements](#planned-enhancements). Until then, code written to take its store as an argument or read it from configuration can be tested with the `async: true` pattern above.
+This is the one case ActiveMemory cannot isolate for you yet. A sandbox that gives each test process its own table is planned for 0.10.0 — see [Planned Enhancements](#planned-enhancements). Until then, code written to take its store as an argument or read it from configuration can be tested with the `async: true` pattern above.
 
 ### Mnesia tables in tests
 Mnesia tables are owned by the Mnesia subsystem rather than the `Store`, so clean them up with `:mnesia.delete_table/1` instead of `:ets.delete/1`. Running `mix test --no-start` (as this project does) keeps the application from starting its own stores while the suite manages them.
@@ -582,8 +582,10 @@ A demo application built on the current release — showing catalog data served 
 
 ## Planned Enhancements
 
-### 0.9.0 — safe to keep
-0.8.0 made ActiveMemory easy to start; 0.9.0 makes it safe to keep — under concurrent tests, growing tables, and concurrent writers.
+0.9.0 made misconfiguration fail loudly: table options are checked at compile time, and a store whose startup fails does not start. See the [Changelog](https://hexdocs.pm/active_memory/changelog.html) for what each release shipped.
+
+### 0.10.0 — safe to keep
+0.8.0 made ActiveMemory easy to start; 0.10.0 is to make it safe to keep — under concurrent tests, growing tables, and concurrent writers.
 
 - **Test isolation.** A sandbox (`ActiveMemory.Test`) giving each test process its own table, so test modules that share your application's store can run `async: true`. Test modules that own their table already run concurrently today — see [Testing](#testing) — but a context test writing through the app's singleton store cannot be isolated yet, because a table's module name is its physical table name.
 - **Secondary indexes the reads use.** Attribute queries are full scans today, and the Mnesia `index:` option builds indexes no read path consults — writes pay for maintenance, reads get nothing. Shadow index tables for ETS, `:mnesia.index_read/3` for Mnesia, so querying by attribute stays fast as tables grow. Also what makes `order_by` and pagination affordable.
@@ -593,9 +595,10 @@ A demo application built on the current release — showing catalog data served 
 - **Cluster tests in CI.** The distributed migration tests are currently excluded; `local_cluster` 2.x (`:peer` based) makes running them cheap. Includes fixing the `create_table` retry loop when a configured replica node is permanently unreachable, and partition tests documenting behavior with and without `majority: true`.
 
 ### Exploring
-Ideas under consideration once 0.9.0 lands — feedback welcome:
+Ideas under consideration once 0.10.0 lands — feedback welcome:
 
 - A replicated, partition-safe backend (Raft based, e.g. [Khepri](https://hexdocs.pm/khepri)) alongside ETS and Mnesia, for tables that must stay consistent across nodes.
+- Broadcast writes for node-local tables — an ETS table on every node, updated by publishing each write over `Phoenix.PubSub`. Eventually consistent rather than transactional, for configuration data that every node reads but that does not need a replicated Mnesia table.
 - Reactive reads — subscribe to changes on a table without polling.
 - Write-behind sync to an external store (a database or Redis) for durability and cold starts, keeping reads at memory speed.
 
